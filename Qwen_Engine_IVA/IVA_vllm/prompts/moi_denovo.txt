@@ -1,0 +1,115 @@
+MOI LAYER: DE NOVO ANALYSIS
+
+This variant's gene has a dominant-relevant inheritance mode (AD, AD_AR, or
+XLD). This layer checks specifically for DE NOVO occurrence — do NOT
+re-evaluate or re-score anything already covered in the BASE CONCLUSION below
+(molecular mechanism, frequency, in-silico evidence, PVS1/PM1/PM2/PM5/PP3/PP4/
+BA1/BS1/BS2/BS4/BP1/BP7). This layer only ADDS a de-novo-specific criterion on top
+of that base score.
+
+BASE CONCLUSION (already scored — ground truth, do not recompute):
+{base_conclusion}
+
+SEGREGATION (backend-determined from allelic balance — do not re-derive):
+{segregation_block}
+
+PARENTAL DATA STATUS (backend-determined): {parental_data_status}
+
+TASK:
+
+1. If PARENTAL DATA STATUS is "trio (both parents)" AND SEGREGATION above
+   states "de_novo": apply PS2 [Strong, +4] — confirmed de novo, both parents
+   tested and shown not to carry the variant. PS2 additionally requires the
+   variant to be rare (PM2). Check the BASE CONCLUSION's own ACMG criteria
+   list above for whether PM2 was applied there — if PM2 is NOT present in
+   the base criteria list, do NOT apply PS2 regardless of what SEGREGATION
+   says; state explicitly that de novo status alone does not substitute for
+   a frequency check.
+
+   MOSAICISM CAVEAT (does not block PS2): SEGREGATION may read
+   "de_novo (possible low-level parental mosaicism — mother/father AB=X.XX)"
+   — this still counts as "states de_novo" for the purposes of this rule; a
+   trace-level AB reading in a parent (a small but nonzero number, not a
+   clean 0) is more consistent with low-level parental mosaicism or assay
+   noise than with that parent being a true heterozygous carrier, which
+   would read close to 0.5. Apply PS2 normally, but carry the caveat text
+   into the Comment field so it is visible to a genetic counselor (a mosaic
+   parent has real recurrence-risk implications for future pregnancies,
+   even though it doesn't change this variant's own ACMG classification).
+   Do not treat this caveat as a reason to withhold PS2 or fall back to
+   "uncertain" — SEGREGATION already resolved that question deterministically.
+
+2. If PARENTAL DATA STATUS is "partial (one parent only)": de novo status
+   cannot be confirmed with a trio. If the available parent's data supports
+   the variant being absent in that parent (consistent with, but not proof
+   of, de novo), apply PM6 [Moderate, +2] — assumed de novo, without
+   confirmation of paternity/maternity or complete parental testing.
+
+3. If PARENTAL DATA STATUS is "none": de novo status CANNOT be assessed at
+   all. Do not apply PS2 or PM6. State this explicitly — this variant is
+   reported here as a pathogenic-per-base-ACMG candidate under this gene's
+   dominant-relevant mode, with de novo status simply unassessed, per the
+   base score alone.
+
+4. If SEGREGATION above does NOT literally state "de_novo" (as its own exact
+   word, not merely "trio data with a low reading somewhere") even though
+   trio data is present: this variant is not de novo — do not apply PS2 or
+   PM6 here, regardless of which of the other backend values it names below.
+   Note this explicitly; this variant belongs in the dominant-inherited (or
+   recessive) layer instead, not this one. The full set of non-"de_novo"
+   values SEGREGATION can hold, and what each one means — copy the value
+   verbatim, never re-derive or reinterpret it from the raw allelic-balance
+   numbers yourself, and never invent a gloss for one not listed here:
+   - "maternal" / "paternal" — proband het, ONE parent het, other parent
+     absent: a confirmed INHERITED transmission, not de novo.
+   - "both_carriers" — proband hom, BOTH parents het: classic recessive
+     carrier pattern, not de novo (belongs in the recessive layer).
+   - "homozygous_parent" — a parent's own AB reads ~1.0 for this exact
+     variant, i.e. that parent is HOMOZYGOUS FOR THE VARIANT ITSELF (NOT
+     "homozygous reference"/wild-type — an AB near 1.0 is the opposite of
+     wild-type, it means nearly all reads carry the alt allele). This is
+     the STRONGEST possible evidence AGAINST de novo — stronger than a
+     simple heterozygous carrier parent, not weaker, and never a signal
+     that supports or "confirms" de novo. A real observed failure: a
+     father's AB=1.00 for the variant was misread as "homozygous
+     reference" and used to claim a de novo origin — the diametric
+     opposite of what that reading means. Never repeat this.
+   - "uncertain" — parent data present but doesn't cleanly match any known
+     pattern (including the ambiguous 0.2-0.3/0.7-0.8 AB bands, or a
+     proband/parent combination inconsistent with a single clean pattern):
+     de novo status could not be confirmed. Do not apply PS2 on the theory
+     that "uncertain might still mean de novo" — SEGREGATION already
+     resolved this deterministically; treat it as a closed question, not an
+     invitation to reconsider from the raw numbers.
+   - "insufficient_data" — neither parent's AB is present at all: de novo
+     status cannot be assessed (same handling as PARENTAL DATA STATUS
+     "none" in rule 3 above).
+
+DO NOT write "Base ACMG criteria", "Base ACMG points", or "Total ACMG
+points" yourself — the base criteria block is spliced in by the pipeline
+straight from the BASE CONCLUSION, and the Total is computed by code as base
++ your delta line. Your job here is ONLY this layer's own criterion and its
+delta line. Never add, drop, or restate a base criterion (PP4 included) at
+this layer; anything you write about base scoring is deleted.
+
+Use exactly this format:
+
+# De Novo Analysis — [GENE] ([HGVS])
+**Parental data:** [trio (both parents) / partial (one parent only) / none]
+**Segregation:** [copy the backend-determined value verbatim from above]
+**De novo criteria applied:**
+- [PS2 or PM6, if applicable, with strength/points and one-sentence justification]
+[or: "None — de novo status not confirmed / not assessable, see reasoning above"]
+**De novo delta:** [+4 / +2 / +0]
+**Comment:** [1-2 sentences explaining the de novo determination]
+
+Classification thresholds (sum of applied points, same as base layer):
+- Pathogenic: ≥ 10
+- Likely Pathogenic: 6 to 9
+- Uncertain Significance (VUS): 0 to 5
+- Likely Benign: -1 to -6
+- Benign: ≤ -7
+
+CITATIONS ARE MANDATORY: every claim traceable to a source in the base conclusion or variant context above (including citations already present there) MUST be cited/carried forward inline using (PMID:XXXXXXXX) or a bare URL. Do not write an uncited claim when its source is available above. Do not introduce new evidence not already present in the base conclusion or variant context above.
+
+CITATIONS FORMAT: citations appear inline only — (PMID:XXXXXXXX) or a URL placed inside the sentence it supports, right after the specific claim. Never write a separate CITATIONS, References, or Sources list or section, and never cite a PMID in a sentence about a different gene or variant than the one it supports.

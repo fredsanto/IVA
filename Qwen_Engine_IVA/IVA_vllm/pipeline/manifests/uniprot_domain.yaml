@@ -1,0 +1,11 @@
+name: uniprot_domain
+description: "Deterministic PM1 domain check — UniProt domain around the variant, ClinVar P/LP vs benign (ClinVar B/LB + gnomAD AF>1% or >=10 homozygotes) missense in it, plus independent UniProt support."
+enabled: true
+
+order: 1
+parallel: true
+
+timeout: 120
+retry:
+  attempts: 2
+  backoff: 2.0

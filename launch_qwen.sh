@@ -22,8 +22,8 @@
 # documented usage ("cd ServerQwen && sbatch launch_qwen.sh") that's this
 # script's own directory. Falls back to $(pwd) for non-SLURM/manual runs.
 SERVERQWN_DIR="${SLURM_SUBMIT_DIR:-$(pwd)}"
-PIPELINE_DIR="$SERVERQWN_DIR/Qwen_Engine_GENOVA2I/genova_vllm_556_0610"
-CONDA_ENV="$SERVERQWN_DIR/Qwen_Engine_GENOVA2I/env_vllm_0606"
+PIPELINE_DIR="$SERVERQWN_DIR/Qwen_Engine_IVA/IVA_vllm"
+CONDA_ENV="$SERVERQWN_DIR/Qwen_Engine_IVA/env_vllm_0606"
 VENV_UVICORN="$SERVERQWN_DIR/../.venv_qwen/bin/uvicorn"
 
 BACKEND="${PIPELINE_BACKEND:-direct}"
@@ -41,6 +41,9 @@ PIPELINE_PORT="${PIPELINE_PORT:-8000}"
 # which is why access logs/vLLM-ready lines always showed up fine while plain
 # prints didn't. Forcing unbuffered I/O makes the log reflect real-time state.
 export PYTHONUNBUFFERED=1
+
+# NCBI E-utilities key (10 req/s instead of 3). Kept outside the repo.
+[ -r "$HOME/.ncbi_api_key" ] && export NCBI_API_KEY="$(cat "$HOME/.ncbi_api_key")"
 
 cd "$SERVERQWN_DIR" || exit 1
 

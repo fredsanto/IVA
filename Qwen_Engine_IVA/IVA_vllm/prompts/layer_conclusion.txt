@@ -1,0 +1,169 @@
+Patient phenotype: {patient_phenotype}
+
+{layer_name} layer findings (every block below belongs to THIS layer only —
+no other layer's blocks are included in this prompt):
+{layer_blocks}
+
+TASK: This is a MAP step over a single MOI layer, not the full clinical
+conclusion. A separate downstream step will combine your output here with
+every other layer's own output into the final report — do not write section
+1 (phenotype summary), section 3 (actionable findings), or section 5 (overall
+summary); those require cross-layer visibility you do not have here. Your
+only job is to extract, from THIS layer's blocks, which variants are
+CAUSATIVE and which are Notable VUS, and write them up completely enough
+that the downstream step never needs to re-read the raw blocks below.
+
+Each block already carries its own "Total ACMG points: N → Classification"
+(or, for Unclassified, "ACMG points: N → Classification") — this is an
+already-computed, already-corrected score; do not recompute or re-derive it.
+
+CAUSATIVE THRESHOLD RULE (mandatory): a variant is CAUSATIVE if its own
+block's total ACMG point value is >= 6 (Tavtigian et al. 2020: 6-9 = Likely
+Pathogenic, >=10 = Pathogenic). This is a per-variant threshold check, not a
+competition — list EVERY qualifying variant in this layer, even if several
+different variants/genes each clear the bar and even if one scores higher
+than another. Do NOT pick only the single highest-scoring variant in this
+layer and drop the rest. A variant scoring below 6 is never causative
+regardless of any other consideration.
+
+COMPOUND-HET JOINT THRESHOLD EXCEPTION (mandatory, RECESSIVE layer only,
+applies only to a block of the "(compound heterozygous / biallelic)" PAIR
+kind — never to a "(confirmed homozygous, biallelic)" single-variant block):
+a compound-het pair is causative as a PAIR, not as two independent
+single-variant threshold checks. The block already states its own
+backend-computed "**Joint compound-het classification:**" line — copy that
+verdict verbatim. If CAUSATIVE, list both variants as co-causative. If
+COMPOUND VUS, do NOT list either as causative even if one partner's
+individual total is >= 6 — mention the pair under Notable VUS instead if
+either variant's own total is >= 4 and < 6.
+
+PHASE CHECK (mandatory, RECESSIVE layer only): a compound-het block already
+states its own "**Phase:**" line (TRANS confirmed or UNKNOWN, determined in
+code before the block was generated). Copy it verbatim into your write-up
+rather than re-deriving it. If the block's own text appears to contradict
+its stated Phase, treat this as a factual inconsistency and note it
+explicitly rather than silently trusting either value — do not synthesize a
+compound heterozygous finding from it in that case.
+
+HYPOTHESIS-PM3 QUALIFIER MUST PROPAGATE (mandatory, RECESSIVE layer only,
+applies when Phase reads "UNKNOWN" and PM3 was applied as a hypothesis —
+check the variant's own "Recessive criteria applied:" line for the substring
+"hypothesis"): prefix the classification with "Potential" for both variants
+(e.g. "Potential Pathogenic") instead of the bare label, and state explicitly
+that the compound-heterozygous call rests on an unconfirmed trans phase and
+requires segregation/phasing testing to confirm, carrying forward the
+block's own "**Recommendation:**" line. Do not write "CAUSATIVE" as a bare,
+unqualified verdict for this pair. This does not apply when Phase reads
+"TRANS confirmed".
+
+SINGLE-HIT RECESSIVE CHECK (defense-in-depth — check this BEFORE trusting
+any block's own >=6-point total): if a block outside RECESSIVE describes a
+heterozygous variant in a known AR/XLR gene with no second variant/trans
+partner mentioned as causative, this variant is NEVER causative regardless
+of its own stated ACMG points or classification label — a het single-hit in
+a purely recessive gene cannot produce a fully recessive phenotype. This
+applies to a DE NOVO layer block exactly as much as any other — confirmed de
+novo status tells you where the allele came from, not how many alleles are
+present. If a block's own text redefines a gene as dominant in order to
+admit a variant that is actually AR/XLR, treat that as the block reasoning
+incorrectly, not as grounds for inclusion.
+
+VARIANT IDENTITY CHECK (mandatory, before writing any variant): [GENE] and
+[HGVS] must be copied CHARACTER-FOR-CHARACTER from that variant's own block
+header line (e.g. its "# Variant N — GENE (HGVS)" line, or a RECESSIVE
+block's "# Recessive Analysis (...) — GENE (HGVS)" line). Never retype,
+reconstruct, abbreviate, or paraphrase the HGVS from memory. A protein change
+quoted inside a PS1/PM5 criterion line is a different ClinVar comparator
+variant at the same residue — never the patient's own variant.
+
+SEGREGATION/MOI IDENTITY CHECK (mandatory, before writing any variant — a real
+observed failure this guards against): this layer's blocks above are
+concatenated back-to-back, several different variants at once, each with its
+own "**Segregation:**" line (de novo / inherited from mother / inherited from
+father / uncertain / etc). When writing THIS variant's segregation status,
+parental carrier information, or any de-novo/inheritance claim, you MUST
+re-read and copy it from THIS variant's own block only — its own "Parental
+data:", "Segregation:", and "**Comment:**" lines — never from a block above or
+below it in this prompt, even if that other block's wording would fit more
+smoothly into the sentence you are writing. A real observed failure: a
+block whose own Segregation line read "de novo" (both parents AB=0, no
+mention of either parent carrying the variant) was written up as "inherited
+from the father" and then used to override the block's own stated PS2
+application and total — because a *different* variant a few blocks away in
+the same layer-batch genuinely was inherited from the father, and that
+phrase bled into the wrong write-up. Before writing any inheritance-related
+clause, silently re-verify: does THIS EXACT variant's own block contain this
+exact wording? If not, do not write it — re-derive the clause from this
+variant's own "Segregation:"/"Parental data:" lines instead, and never
+"correct" or second-guess a block's own stated Segregation value or Total
+ACMG points based on your own re-reading — those are already-computed
+upstream and are copied verbatim, not re-derived, exactly like the point
+totals mentioned above.
+
+For each CAUSATIVE variant, write:
+
+[GENE] ([HGVS]) — [MOI tag — this names which layer PROCESSED the finding,
+not a confirmed inheritance claim. Only write "De novo" if the block's own
+"De novo criteria applied:" line names PS2 or PM6 (delta > +0); otherwise
+write "AD candidate, de novo unconfirmed" (or "...unassessed" if Parental
+data: none). Only write "Dominant-inherited" if the block's own delta from
+PP1 is > +0; otherwise write "AD candidate, cosegregation unconfirmed".]
+
+Name the disease/condition using ONLY the name stated in this gene's own
+block — never borrow a disease name from a different gene. If the block
+does not name a specific disease, do not invent one.
+
+Write a short prose paragraph (2-4 connected sentences) covering, in this
+order, whichever apply: segregation/inheritance status (include parental
+carrier/zygosity when available); any allelic-balance call-quality caveat
+stated in this variant's own block Comment (e.g. "AB anomalously low —
+possible artifact/mosaicism") — carry it forward explicitly even when the
+classification is Likely Pathogenic/Pathogenic, call quality and ACMG
+strength are independent axes; population frequency; ClinVar classification,
+review status/star rating, and full per-submission tally if present in the
+block's own **ClinVar:** line, copied verbatim; mutational hotspot/domain
+status; loss-of-function mechanism; relevant publications with PMIDs; and
+why this variant explains the patient's phenotype.
+
+CRITERIA LIST (mandatory, before the classification line): copy the
+criteria list for this variant directly out of its own block (base
+conclusion criteria AND, if this is a layer-added criterion, the criterion
+this layer itself added — PM3 for Recessive, PS2/PM6 for De Novo, PP1 for
+Dominant-Inherited). Do not compose this list from memory. Format each
+clause as "[CRITERION] ([Strength], +/-N pts): [one-sentence justification]".
+PM3 may ONLY appear for a RECESSIVE-layer finding — it is a hallucination
+anywhere else. Fixed point values (Tavtigian et al. 2020): PVS1=+8 |
+PS1/PS2/PS3/PS4=+4 | PM1/PM2/PM3/PM5/PM6=+2 | PP1/PP3/PP4=+1 | BA1=-8 |
+BS1/BS2/BS4=-4 | BP1/BP7=-1. Before finalizing, add up the points you listed
+and confirm the sum equals the block's stated total — if not, check first
+for a missing layer-added criterion before assuming anything else is wrong.
+
+Then: **ACMG classification:** [classification] ([N] pts total).
+
+CITATIONS AND ALLELIC-BALANCE CAVEATS ARE MANDATORY, NOT OPTIONAL: carry
+forward every (PMID:XXXXXXXX)/URL citation attached to a claim you restate,
+and carry forward any AB artifact/mosaicism caveat from the block's own
+Comment, even for a Pathogenic/Likely Pathogenic finding. Do not introduce
+new evidence not present in the block.
+
+CITATIONS FORMAT: citations appear inline only — (PMID:XXXXXXXX) or a URL placed inside the sentence it supports, right after the specific claim. Never write a separate CITATIONS, References, or Sources list or section, and never cite a PMID in a sentence about a different gene or variant than the one it supports.
+
+For each Notable VUS (own block total >= 4 AND < 6, classification
+"Uncertain significance"/"VUS"): list as [GENE] ([HGVS]) — [N] pts, with a
+one-sentence justification copied from that variant's own criteria list,
+plus its ClinVar review status/star rating and per-submission tally if its
+own **ClinVar:** line states them. Apply the same VARIANT IDENTITY CHECK
+here — do not let one entry's HGVS bleed into an adjacent entry's.
+
+Never mention a Benign, Likely Benign, or sub-4-point variant anywhere in
+your output — omit it entirely, as if it were never in the input.
+
+Output format (plain text, no markdown heading):
+
+CAUSATIVE:
+[one full write-up per causative variant as specified above, or the single
+line "None in this layer." if none qualify]
+
+NOTABLE VUS:
+[one line per notable-VUS variant as specified above, or the single line
+"None in this layer." if none qualify]

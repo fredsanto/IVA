@@ -1,0 +1,446 @@
+Patient phenotype: {patient_phenotype}
+MOI-layer findings: {conclusions}
+
+ACMG SF actionable-gene findings (ground truth, computed independently of the
+layers above — use this list, do not re-derive actionable status yourself):
+{actionable_variants}
+
+TASK: Identify which MOI layer(s) and variant(s) jointly explain the patient's
+phenotype.
+
+The findings above are grouped by MOI layer (e.g. "=== DE NOVO LAYER ===",
+"=== DOMINANT-INHERITED LAYER ===", "=== RECESSIVE LAYER ===", "=== X-LINKED
+LAYER ===", "=== UNCLASSIFIED ==="). Each block already carries its own
+"Total ACMG points: N → Classification" (or, for Unclassified, "ACMG points:
+N → Classification") — this is the already-computed base+layer-delta score;
+do not recompute or re-derive it. A variant's gene may qualify for more than
+one layer (e.g. an AD_AR gene may have blocks in both the DOMINANT-INHERITED
+and RECESSIVE layers) — ground every claim you make in something stated in
+its own layer block (zygosity, inheritance, gene-disease evidence, ClinVar
+status, etc.).
+
+STEP 0 — LAYER SUMMARY (mandatory, do this first): for each MOI layer present
+above, list EVERY variant in that layer whose own block total is >= 6 points
+(Likely Pathogenic or Pathogenic) — not just the single highest-scoring one.
+A layer with three qualifying variants gets three named here, each with its
+gene, variant, and score; do not truncate to a "top finding" and drop the
+rest, even if one clearly outscores the others. A patient can have genuinely
+independently-explanatory findings under different mechanisms, and multiple
+independently-explanatory findings within the SAME layer — e.g. two separate
+de novo pathogenic variants in two different genes are BOTH real diagnoses,
+not competitors, and neither is dropped for scoring lower than the other. Do
+not force a single winner within or across layers unless one finding's own
+block clearly subsumes or invalidates another's (stated in that block's own
+text, not inferred from score alone).
+
+STEP 1 — PHASE CHECK (mandatory, defense-in-depth): a RECESSIVE layer block
+already states its own "**Phase:**" line (TRANS confirmed or UNKNOWN — this
+was determined deterministically in code before the block was ever
+generated, and a CIS pair never produces a RECESSIVE layer block at all).
+Copy each RECESSIVE block's "**Phase:**" line verbatim into your reasoning
+rather than re-deriving it. If you see a RECESSIVE block whose own text
+appears to contradict its stated Phase (e.g. describes both variants as
+"inherited from mother" while Phase says TRANS), treat this as a
+factual inconsistency in that block and note it explicitly rather than
+silently trusting either value — do not synthesize a compound heterozygous
+finding from it in that case.
+
+CAUSATIVE THRESHOLD RULE (mandatory, applies uniformly to EVERY MOI layer —
+De Novo, Dominant-Inherited, Recessive, X-Linked, Unclassified — no layer gets
+a different bar): a variant is CAUSATIVE, and MUST be listed in section 2, if
+its own layer/base block's total ACMG point value is >= 6 (Tavtigian et al.
+2020: 6-9 = Likely Pathogenic, >=10 = Pathogenic). This is a per-variant
+threshold check, not a competition — every qualifying variant across every
+layer goes in section 2, even if several different variants/genes each clear
+the bar and even if one of them scores higher than the others. Do NOT pick
+only the single highest-scoring variant and drop the rest to reasoning-only
+mention or omit them entirely once they clear >=6 points. The only reasons a
+>=6-point variant may be excluded from section 2 are the ones already listed
+elsewhere in these rules (TRANS STATUS / CIS collapse, SINGLE-HIT RECESSIVE
+CHECK, COMPOUND-HET JOINT THRESHOLD EXCEPTION below, a stated factual
+inconsistency in its own block) — never "a stronger finding already explains
+the phenotype" or "already covered by another gene" as a reason alone to drop
+a second independently-qualifying variant. A variant scoring below 6 points
+(VUS or below) is never causative regardless of layer, and falls to section 4
+(if its total is >= 4 and < 6) or is omitted per the SCOPE RULE below.
+
+COMPOUND-HET JOINT THRESHOLD EXCEPTION (mandatory, applies only to a
+RECESSIVE layer block of the "(compound heterozygous / biallelic)" PAIR kind
+— never to a "(confirmed homozygous, biallelic)" single-variant block, which
+is unaffected by this rule): a compound-het pair is causative as a PAIR, not
+as two independent single-variant threshold checks. The block already states
+its own backend-computed "**Joint compound-het classification:**" line —
+copy that verdict verbatim rather than re-deriving it. If it says CAUSATIVE,
+list both variants in section 2 as co-causative per STEP 2 below. If it says
+COMPOUND VUS, do NOT list either variant in section 2 as Pathogenic/Likely
+Pathogenic — even though one partner's own individual total may be >= 6 —
+because a single strong allele in a recessive gene does not by itself
+establish a biallelic diagnosis; the weak/VUS partner means the second hit
+required for a recessive mechanism is not confirmed. In that case, mention
+the pair only under section 4 (Notable VUS) if either variant's own total is
+>= 4 and < 6 points, per the normal VUS rule.
+
+HYPOTHESIS-PM3 QUALIFIER MUST PROPAGATE (mandatory, applies to a RECESSIVE
+layer block whose Phase line reads "UNKNOWN" and whose PM3 was applied as a
+hypothesis rather than confirmed — check each variant's own "Recessive
+criteria applied:" line for the substring "hypothesis"): a compound-het pair
+built this way is a WORKING HYPOTHESIS pending trans-phase confirmation, not
+a confirmed diagnosis, even when the block's own "Joint compound-het
+classification" line reads CAUSATIVE and even when each variant's own "Total
+ACMG points" line resolves to a bare "Pathogenic"/"Likely Pathogenic" label —
+those bare labels describe the point math only, not the certainty of the
+finding, and the hypothesis nature does not disappear just because the
+points clear the threshold. When writing section 2 (and the Summary in
+section 5), you MUST: (a) not write any classification for either variant —
+code prints it under the finding with the "Potential" prefix (e.g. "Potential
+Likely Pathogenic"); (b) state explicitly that
+the compound-heterozygous call rests on an unconfirmed trans phase and
+requires segregation/phasing testing to confirm, carrying forward the
+block's own "**Recommendation:**" line rather than omitting it; (c) do NOT
+write "CAUSATIVE" as a bare, unqualified verdict for this pair — write
+"potentially causative, pending phase confirmation" or equivalent. Do not
+reason your way past the UNKNOWN phase label by treating the presence of a
+CAUSATIVE verdict or a passing point total as proof the hypothesis has
+already been confirmed — an UNKNOWN phase that a downstream block chose to
+score under a documented hypothesis-testing exception is still, factually,
+an unconfirmed phase, and the reader of this report needs that caveat
+undiluted. This rule does not apply when the RECESSIVE block's Phase line
+reads "TRANS confirmed" — that is a firm finding and takes the bare labels
+normally.
+
+SCORE-SOURCE CHECK FOR DUAL-MODE GENES (mandatory, applies when a gene has a
+CAUSATIVE compound-het RECESSIVE block AND separate De Novo/Dominant-Inherited
+layer block(s) for the SAME variant(s) — this happens for AD_AR/XLD_XLR genes,
+which are processed by multiple layers independently): once a RECESSIVE
+block's "Joint compound-het classification" says CAUSATIVE, that block's OWN
+per-variant "Total ACMG points" lines (which already include each variant's
+PM3 recessive delta) are the ONLY correct score to cite for those two variants
+in section 2 — never substitute a different total from that same variant's
+separate De Novo or Dominant-Inherited layer block, even though it is sitting
+right there with its own (lower or higher) number. A variant can legitimately
+score differently across layers because PM3 only applies within the Recessive
+block; a lower De Novo/Dominant-Inherited score for the same variant is not a
+contradiction; it is a different layer scoring different criteria, and the
+Recessive block's total is the one that makes the compound-het pair CAUSATIVE.
+A real past failure: a gene's Recessive block correctly computed "Joint
+compound-het classification: CAUSATIVE" with "Variant A: 6 pts, Variant B: 11
+pts; both >= 6" — but STEP 2 then wrote "Variant A: Total ACMG points = 4
+(<6). Not causative on its own," citing Variant A's separate De Novo/
+Dominant-Inherited layer score (which never received the PM3 delta) instead
+of the Recessive block's own 6-point total, silently dropping Variant A from
+section 2 and reporting only Variant B as causative — directly contradicting
+the Recessive block's own CAUSATIVE verdict one paragraph above it. Before
+writing a variant's total in STEP 2 or section 2, check whether it is one
+half of a CAUSATIVE compound-het pair; if so, its score comes from the
+Recessive block, full stop, regardless of what other layer blocks say about
+the same variant.
+
+STEP 2 — For each layer's findings, list the variant(s)/layer(s) that
+together explain the phenotype, applying the CAUSATIVE THRESHOLD RULE above.
+Decide each variant's status ONCE, in 1-3 sentences, and move on — do not
+write multiple rounds of reconsideration for the same variant (no "Wait,
+looking closer...", "Re-reading the rule...", "Correction/Refinement:", or
+similar backtracking prose). A real past failure: the model spent several
+paragraphs re-arguing a single borderline variant (SPATA13) back and forth
+before ever reaching the # Clinical Conclusion section, and the response was
+cut off by the token budget before section 5 was ever written — every
+variant after the one it got stuck on was silently lost. State the decision
+and its one-sentence reason, then continue to the next variant:
+
+EVERY block's own "Total ACMG points"/"ACMG points" line above (and its
+"Base ACMG points"/delta lines, where present) was already deterministically
+re-summed and corrected by code before this stage ever received it — it is
+not the model's own arithmetic and it is never wrong. Copy the stated number
+and classification as given; do NOT re-add the criteria list yourself to
+"double check" it, and do NOT treat an unfamiliar-looking total (e.g. a
+Base+delta combination that looks large) as a discrepancy to investigate. A
+second real past failure, same root cause as the SPATA13 one above but
+triggered by arithmetic instead of causative-status doubt: the model spent
+an entire response re-deriving whether a variant's own "Total ACMG points: 14
+→ Pathogenic" line was correct — repeatedly recomputing 10+4, second-guessing
+which criteria list applied, cross-checking against an unrelated variant's
+block — before concluding (correctly, and unnecessarily) that the stated
+total had been right all along, by which point the token budget was spent
+and no # Clinical Conclusion section was ever written. If a total looks
+surprising, state that once in one sentence and move on — never re-sum it.
+- A RECESSIVE layer block of the "(compound heterozygous / biallelic)" PAIR
+  kind covers BOTH its variants jointly (they are presented as co-causative,
+  not competing) ONLY when its own "**Joint compound-het classification:**"
+  line says CAUSATIVE — per the COMPOUND-HET JOINT THRESHOLD EXCEPTION above.
+  Do not re-rank the two variants against each other, but also do not treat
+  the pair as causative when that line says COMPOUND VUS.
+- A DE NOVO or DOMINANT-INHERITED or X-LINKED layer block covers ONE variant.
+- If the same gene appears in more than one layer (e.g. DOMINANT-INHERITED
+  and RECESSIVE), decide from the evidence in each block which mechanism the
+  data actually supports for this case — state your reasoning, do not
+  silently drop one.
+- SPECIAL CASE — DE NOVO + X-LINKED on the same gene/variant: these are NOT
+  competing alternative diagnoses. A confirmed de novo occurrence (PS2, from
+  trio testing) is independent, stronger evidence of dominant mechanism than
+  X-linked cosegregation (PP1, which requires an affected mother transmitting
+  the variant — irrelevant once de novo is already confirmed). When a DE NOVO
+  layer block and an X-LINKED layer block both exist for the same gene/variant,
+  use the DE NOVO layer's total score and classification as the one that
+  explains the phenotype, note in your reasoning that the X-linked layer's
+  lower score simply reflects PP1 not being met (not a weaker or conflicting
+  diagnosis), and do not present the X-linked layer's lower classification as
+  a separate, competing finding.
+
+SINGLE-HIT RECESSIVE CHECK (defense-in-depth, and an EXPLICIT EXCEPTION to
+the CAUSATIVE THRESHOLD RULE above — check this BEFORE trusting any block's
+own >=6-point total): if any UNCLASSIFIED block (or any layer block outside
+RECESSIVE) describes a heterozygous variant in a known AR/XLR gene with no
+second variant/trans partner mentioned as causative, this variant is NEVER
+causative, regardless of what ACMG points total or classification label that
+block itself states — a het single-hit in a purely recessive gene cannot
+produce a fully recessive phenotype no matter how many points its own
+molecular criteria (PVS1, PM2, etc.) add up to. This should already have
+been excluded upstream (base layer's RECESSIVE SINGLE-HIT CHECK, capped to
+VUS there; Layer 5's Python TRANS gate never producing a RECESSIVE block for
+it) — but do not assume that upstream check fired correctly just because
+this synthesis prompt exists to catch it if it didn't. A real past failure:
+a block for a heterozygous variant in an AR-only gene stated in its own
+Comment "this finding alone is insufficient to confirm a diagnosis... without
+a compound heterozygous or homozygous partner variant" one line below its own
+"ACMG points: 11 → Pathogenic" line — and that Pathogenic label, not the
+Comment next to it, was what got carried into section 2 as a causative
+finding. Do not repeat this: for every variant you are about to list in
+section 2, explicitly check its own zygosity and gene inheritance mode
+(stated in its layer block) before trusting its classification label — a
+"Pathogenic"/"Likely Pathogenic" label attached to a lone heterozygous
+finding in an AR/XLR gene is wrong by construction and must be excluded here
+regardless of its stated point total, with a one-sentence note why.
+
+This check applies to a DE NOVO layer block exactly as much as any other —
+PS2/confirmed de novo status is not an exception. De novo only tells you
+where the single allele came from, not how many alleles are present; a
+heterozygous de novo variant in an AR/XLR gene is still one allele, and an
+AR/XLR condition still needs two. If a block's own text describes the gene
+as dominant, or as having a dominant mechanism, in order to admit a variant
+that an earlier layer/backend determination had already called AR/XLR, treat
+that as the block reasoning incorrectly, not as grounds for inclusion — the
+gene's inheritance mode is a fact about the gene, not something a single
+block gets to redefine per variant to clear this check.
+
+SCOPE RULE (mandatory — applies to the entire # Clinical Conclusion section
+below): the ONLY variants that may be named anywhere in this section are:
+  (a) causative variant(s) — section 2;
+  (b) ACMG SF actionable finding(s) from the ground-truth list above — section 3;
+  (c) VUS variant(s) whose OWN layer/base block states a total ACMG point
+      value that is >= 4 AND < 6 (i.e. 4, 4.5, 5, or 5.5 — half-point totals
+      are expected from a reduced-weight PM3 delta and count as in range;
+      6 itself is Likely Pathogenic, not VUS, and belongs in section 2
+      instead) — section 4.
+A variant classified Benign or Likely Benign — or a VUS with a point total
+outside [4, 6) — must NEVER be named, listed, described, or even referenced as
+"excluded"/"not causative" anywhere in this section. Do not mention that such
+a variant exists, was considered, or was ruled out. Simply omit it entirely,
+as if it were never in the input. This rule overrides any instinct to be
+comprehensive — sections 2-4 below define the full and only scope.
+
+Then write the clinical conclusion.
+
+# Reasoning
+[Start with the STEP 0 layer summary, then the STEP 1 phase-check line(s) for
+any RECESSIVE layer gene, then 3-6 sentences comparing findings across layers
+and explaining which layer(s)/variant(s) jointly explain the phenotype]
+
+# Clinical Conclusion
+
+CLINVAR STATUS (sections 2, 3 and 4): do not write a "CLINVAR: <value>" tag
+yourself — code adds it to each finding line when that variant has a ClinVar
+status. When a variant's block has no "CLINVAR:" status, write nothing about
+it: never "CLINVAR: undefined", "unknown", or any placeholder.
+
+1) Summary of clinical phenotype: [1-2 sentences summarizing the patient's phenotype as given]
+
+2) Causative variant(s): list EVERY variant meeting the CAUSATIVE THRESHOLD
+   RULE above (own layer/base block total ACMG points >= 6, i.e. Likely
+   Pathogenic or Pathogenic) — grouped by MOI layer if more than one layer
+   contributed findings. This is not limited to one "primary" finding: if two,
+   three, or more variants in different genes/layers each independently clear
+   the >=6-point bar, ALL of them go here, each with its own full write-up. If
+   a RECESSIVE block's two variants are both causative, list each on its own,
+   ALWAYS preceded by its gene name, and do not present them as competing
+   with each other. If findings come from more than one layer for different
+   genes, present each layer's finding as its own independent diagnosis
+   unless the evidence clearly says otherwise — a higher-scoring finding
+   elsewhere is NOT grounds to omit another qualifying finding.
+
+   VARIANT IDENTITY CHECK (mandatory, before writing the line below): [GENE]
+   and [HGVS] must be copied CHARACTER-FOR-CHARACTER from that variant's own
+   layer/base block header line above (e.g. its "# Variant N — GENE (HGVS)"
+   line). Never retype, reconstruct, abbreviate, or paraphrase the HGVS from
+   memory — copy the exact substring. A real past failure to not repeat: the
+   source block's own header read "c.100G>A:p.W34X" (nonsense/stop-gain,
+   confirmed by AutoPVS1/ClinGen elsewhere in the same block) and the draft
+   instead wrote "c.100G>A; p.Glu34Lys" — a fabricated missense change that
+   directly contradicts the same paragraph's own PVS1/NMD reasoning one
+   sentence later. Any mismatch between the amino acid change you are about
+   to write and the source block's own HGVS string, however small, is this
+   exact failure — stop and copy the source string exactly instead.
+
+   RECESSIVE blocks carry the HGVS in their header too, after the kind
+   label: "# Recessive Analysis (confirmed homozygous, biallelic) — GENE
+   (HGVS)". Copy it from there like any other block. A protein change quoted
+   inside a PS1/PM5 criterion line is a DIFFERENT ClinVar comparator variant
+   at the same residue — never the patient's own variant.
+
+   [GENE] ([HGVS]) — [MOI layer tag — this names which layer PROCESSED the
+   finding, not a confirmed inheritance claim. A variant lands in the DE NOVO
+   LAYER simply because its gene is AD/AD_AR/XLD, regardless of whether any
+   parent was ever tested — check that layer block's own "De novo criteria
+   applied:" line before tagging: only write "De novo" here if that line
+   names PS2 or PM6 (i.e. the layer's delta was > +0). If the block instead
+   says "None — de novo status not confirmed/not assessable" (delta +0), do
+   NOT write "De novo" as the tag — write "AD candidate, de novo unconfirmed"
+   (or "AD candidate, de novo status unassessed" if Parental data: none)
+   instead. Same rule for "Dominant-inherited" — only use that tag if the
+   Dominant-Inherited layer block actually applied PP1 (delta > +0);
+   otherwise write "AD candidate, cosegregation unconfirmed". A layer
+   producing a block for a gene is not the same as that layer's specific
+   criterion having been met — the tag must reflect the latter.]
+
+   Naming the disease/condition this gene causes: use ONLY the disease name
+   stated in THIS gene's own layer block — never borrow or generalize a
+   disease name from a different gene discussed nearby, even when several
+   genes share a broad phenotype category (e.g. multiple genes each
+   contributing to "visual impairment" does NOT mean they share the same
+   specific disease — each keeps only what its own evidence names, e.g. one
+   gene's block may name "X-linked retinoschisis" while another's names
+   "retinitis pigmentosa"; do not let one bleed into the other's paragraph).
+   If a gene's own block does not name a specific disease, do not invent one.
+
+   Write a short prose paragraph (2-4 connected sentences, not bare bullet
+   fragments) covering, in this order, whichever of the following apply:
+   segregation/inheritance status (de novo, inherited maternal/paternal, or
+   both parents carriers if recessive — include parental carrier/zygosity
+   status when available; state "no parental data" if absent); ANY
+   allelic-balance call-quality caveat stated in this variant's own layer
+   block Comment (e.g. "AB anomalously low / suggests artifact or
+   mosaicism") — carry it forward explicitly, in the same sentence as
+   segregation status, even when the variant's ACMG classification is
+   Likely Pathogenic/Pathogenic; call quality and ACMG evidence strength are
+   independent axes, and a high point total is never a reason to drop this
+   caveat during synthesis; population
+   frequency (rare/absent from controls);
+   ClinVar classification, review status and star rating, and full
+   per-submission tally, if present in the layer block's own **ClinVar:**
+   line (e.g. "ClinVar: Pathogenic; review status: criteria provided,
+   multiple submitters, no conflicts (2 stars); tally: Pathogenic=46,
+   Likely pathogenic=0, Uncertain significance=0, Likely benign=0,
+   Benign=0") — copy the star rating and the full 5-bucket tally verbatim
+   from that line whenever it states them, even if no ACMG criterion is
+   tied to it; do not shorten this to just the classification when the
+   source line has more than that. State this explicitly whenever the
+   layer block mentions it; mutational hot spot / critical
+   domain status, if applicable; loss-of-function mechanism, if applicable;
+   relevant publications, with PMIDs, if cited; and why this variant (jointly with its trans partner,
+   only for a RECESSIVE finding) explains the patient's phenotype.
+
+   NO ACMG SCORING (mandatory): you do not assign, copy, list, or restate
+   ANY ACMG criterion, strength, point value, point total, or
+   classification label for a finding — no criteria list, no "**ACMG
+   classification:**" line, and no criterion codes (PVS1, PS1-4, PM1-6,
+   PP1-5, BA1, BS1-4, BP1-7) in the prose. After you finish, code inserts
+   each finding's criteria and total, copied from its own layer block,
+   directly under your paragraph; anything ACMG you write in sections 2 and
+   4 is deleted. Your part of each entry is the header line and the prose
+   paragraph only.
+
+   [repeat the block above for each additional causative variant/layer]
+
+3) Actionable findings (ACMG SF): list every variant in the ACMG SF
+   ground-truth list above, regardless of relevance to the patient's primary
+   phenotype and regardless of whether it is already named in section 2 —
+   ACMG SF findings are reportable purely on gene/pathogenicity, independent
+   of phenotype fit. For each: [GENE] ([HGVS]) — condition: [condition from
+   the ground-truth list]; classification: [classification from the
+   ground-truth list]. One sentence is enough per variant; do not repeat the
+   full section-2 prose paragraph even if the variant already appears there
+   — a brief cross-reference is enough (e.g. "See Section 2 above."). If the
+   ground-truth list says "None", write exactly: "None identified."
+
+4) Notable VUS (ACMG >= 4 and < 6 points): scan every layer/base block above
+   (not just the ones already used in sections 2-3) for any variant whose OWN
+   block states a total ACMG point value that is >= 4 AND < 6 (4, 4.5, 5, or
+   5.5 — a half-point total from a reduced-weight PM3 delta still counts; 6
+   itself is Likely Pathogenic and belongs in section 2, not here)
+   AND a classification of "Uncertain significance" / "VUS". List each as [GENE]
+   ([HGVS]) — [one-sentence reason it is notable for this patient]. No
+   criterion codes, points, or classification: code inserts them under the
+   line, same as section 2.
+
+   VARIANT IDENTITY CHECK APPLIES HERE TOO, NOT ONLY IN SECTION 2: the same
+   character-for-character HGVS-copying rule from section 2 applies to every
+   entry in this section — copy each gene's own HGVS from its own block's
+   header line, never from memory or from a different gene's entry sitting
+   nearby in this same list. A real past failure: when compressing several
+   Notable VUS entries into this section's one-line-per-gene format, one
+   gene's own protein-change notation was pasted onto two OTHER, unrelated
+   genes' entries in the same list, each of which had its own distinct HGVS
+   in its own block on a completely different chromosome. Compressing
+   multiple entries into a short list is exactly
+   where identity bleed between adjacent entries happens — check each
+   entry's HGVS against its own source block individually before finalizing
+   this section, not against whatever HGVS you most recently wrote for the
+   entry above it.
+
+   If that variant's own layer/base block's
+   **ClinVar:** line states a review status/star rating and/or a
+   per-submission tally (Pathogenic/Likely pathogenic/Uncertain
+   significance/Likely benign/Benign counts), append them too — e.g. "...;
+   ClinVar: Uncertain significance, review status: criteria provided,
+   single submitter (1 star), tally: Pathogenic=0, Likely pathogenic=1,
+   Uncertain significance=3, Likely benign=0, Benign=0" — do not drop this
+   information for a VUS entry just because the write-up here is shorter
+   than section 2's; state "ClinVar: no entry found" only when the source
+   block itself says so. Do not include a variant already listed in
+   section 2 as causative. If no such variant exists, write exactly: "None
+   identified."
+
+5) Summary: [one sentence tying together the gene(s), the MOI layer(s)
+   involved, and the condition into a final overall finding — no ACMG
+   criteria, points, or classification labels here either (they are printed
+   under each finding in section 2). Use whatever tag section 2 actually
+   assigned that variant (e.g. "These findings support a diagnosis of
+   [condition] due to a de novo variant in [GENE]" ONLY if section 2 tagged
+   it "De novo"; if section 2 tagged it "AD candidate, de novo
+   unconfirmed/unassessed" instead, say "... due to a variant in [GENE] (de
+   novo status unconfirmed)" — do
+   not upgrade an unconfirmed tag to a confirmed "de novo" claim here), or,
+   if multiple layers contributed, name each. Ground it only in what
+   sections 1-2 already state, no new evidence. Do not summarize sections
+   3-4 here — they stand on their own.]
+
+CITATIONS — INLINE ONLY, MANDATORY: a citation, (PMID:XXXXXXXX) or a URL, is
+written inside the sentence it supports, immediately after the specific
+claim, and only when that same claim carries that citation in the same
+variant's own layer block above. When you restate such a claim in section
+2's prose paragraph (mechanism, ClinVar status, frequency, hotspot, LoF,
+publications), carry its citation forward verbatim, in the same place in the
+sentence. NEVER write a separate citations, references, or sources list or
+section — no "CITATIONS" heading, no "References:", no trailing list of
+PMIDs — anywhere in the report. Never attach a PMID to a sentence about a
+different gene or variant than the one that PMID was cited for in its source
+block, and never mention a PMID you are not using to support a claim. Do not
+drop citations during synthesis/reformatting, and do not introduce a
+citation that wasn't already attached to that claim in its source layer
+block. Ground every claim in this section in the layer blocks above
+(segregation, phase, citations) — do not introduce new evidence.
+
+ALLELIC-BALANCE CAVEATS ARE MANDATORY, NOT OPTIONAL, EITHER: the same rule
+applies to an allelic-balance artifact/mosaicism caveat written into a
+variant's own layer block Comment (e.g. "AB=0.09 is well below the expected
+~0.5 for a genuine het call... more consistent with a sequencing artifact or
+low-level mosaicism"). A real past failure: a variant was carried into
+section 2 as a causative Likely Pathogenic finding (PVS1+PP4, 9 pts) — the
+ACMG scoring itself was correct — but the caveat about anomalously low AB
+across the proband AND both parents, present verbatim in that variant's own
+Comment, was never restated in section 2's prose paragraph. The reader of the
+final report therefore saw a confident Likely Pathogenic call in section 2
+with no indication the underlying sequencing data looked more like an
+artifact than a true heterozygous variant. Summarizing a variant's ACMG
+evidence without also carrying forward its own layer block's call-quality
+caveat is an incomplete synthesis, not a stylistic omission — treat it with
+the same mandatory weight as a dropped citation.

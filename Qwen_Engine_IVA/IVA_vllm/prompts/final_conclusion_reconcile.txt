@@ -1,0 +1,71 @@
+Patient phenotype (verbatim, as submitted): {patient_phenotype}
+
+ACMG SF actionable-gene findings (ground truth for section 3):
+{actionable_variants}
+
+Current clinical conclusion (already fact-checked once against the MOI-layer
+findings — treat everything in it as correct EXCEPT the specific omission
+described below):
+{current_conclusion}
+
+MISSING CAUSATIVE FINDING(S) — a deterministic, code-level scan (not an LLM
+judgment) has already confirmed each variant below independently meets the
+CAUSATIVE THRESHOLD RULE (its own layer/base block's total ACMG points is
+>= 6, Likely Pathogenic or Pathogenic — Tavtigian et al. 2020), or is one
+half of a RECESSIVE compound-het pair whose block's own "Joint compound-het
+classification" line already says CAUSATIVE. None of them is named anywhere
+in section 2 of the conclusion above. Their full source block(s), exactly as
+produced by the MOI-layer stage, follow:
+
+{missing_findings_blocks}
+
+TASK: Add each missing finding above to section 2 (Causative variant(s)) of
+the clinical conclusion, using the SAME full write-up format as every other
+section-2 entry already in the conclusion: a short prose paragraph (2-4
+sentences covering segregation/inheritance, any allelic-balance caveat,
+population frequency, ClinVar status, mechanism, and phenotype fit — grounded
+only in that variant's own block above). Do NOT write any ACMG criterion,
+criterion code, point value, total, or classification label — code inserts
+each finding's criteria and total from its own layer block afterwards. Do not
+write a "CLINVAR:" tag — code adds it. Citations go inline only, inside the
+sentence they support and only where that claim carries them in the source
+block; never write a separate citations/references list.
+
+A variant belongs in section 2 as its own independent finding unless the
+conclusion's existing text (or the block itself) states one of these specific
+reasons it does NOT belong there — do not invent a new reason:
+  - It is one half of a RECESSIVE compound-het PAIR whose block's own "Joint
+    compound-het classification" line says COMPOUND VUS, not CAUSATIVE (then
+    it stays excluded — do not add it).
+  - Its own block states a factual inconsistency (e.g. Phase says TRANS but
+    the block's prose describes both variants as inherited from the same
+    parent) that the existing conclusion has already resolved by excluding it.
+  - It is a heterozygous single-hit in a purely AR/XLR gene with no second
+    variant (SINGLE-HIT RECESSIVE CHECK) — then it stays excluded.
+A higher-scoring finding already in section 2 is NEVER a valid reason to
+leave a missing finding out — multiple independently-qualifying variants in
+different genes (or the same gene) are co-causative, not competitors; add
+every one of them from the list above.
+
+If two or more missing findings share the same gene (e.g. the same gene
+appears with a high score in one layer and a much lower score in a different
+layer for the SAME variant), use the block with the CORRECT applicable score
+for that variant per the SCORE-SOURCE CHECK convention (a RECESSIVE block's
+PM3-adjusted total for a variant that is part of a CAUSATIVE compound-het
+pair overrides that same variant's separate De Novo/Dominant-Inherited total;
+otherwise the layer whose block is listed above for that finding is correct)
+— write it up once, not twice, using the correct block.
+
+After adding every missing finding, update section 5's Summary sentence to
+name every causative gene now in section 2, not only the ones already there
+before this pass.
+
+Do not remove, shorten, or alter any part of the conclusion that is not
+directly affected by adding the missing finding(s) above — same structure
+(# Reasoning, # Clinical Conclusion, same numbered sections 1-5), same
+existing section-2 entries, same sections 3-4, changed/extended only where
+this task requires it.
+
+Output ONLY the final corrected text (# Reasoning ... # Clinical Conclusion
+...). Do not explain what you changed, do not add commentary before or
+after it.

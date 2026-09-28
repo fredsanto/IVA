@@ -1,0 +1,276 @@
+Patient phenotype (verbatim, as submitted): {patient_phenotype}
+
+MOI-layer findings (ground truth — do not deviate from these), grouped by
+layer ("=== DE NOVO LAYER ===", "=== DOMINANT-INHERITED LAYER ===", "===
+RECESSIVE LAYER ===", "=== X-LINKED LAYER ===", "=== UNCLASSIFIED ==="). A
+RECESSIVE layer block is one of TWO kinds — check its title line first:
+  - "(compound heterozygous / biallelic)" — a PAIR of variants; embeds both
+    variants' own base conclusions verbatim plus its own backend-determined
+    "**Phase:**" line (computed in code BEFORE the block was generated — a
+    CIS pair never produces this kind of block at all, so the TRANS STATUS
+    CHECK below is defense-in-depth, not the primary safeguard).
+  - "(confirmed homozygous, biallelic)" — a SINGLE variant; embeds a
+    "**Zygosity:**" line instead, never a "**Phase:**" line. There is no
+    second variant to check phase against — homozygosity for this one
+    variant already satisfies the biallelic requirement on its own, by
+    definition. This kind of block is EXEMPT from the TRANS STATUS CHECK
+    below (it only applies to the two-variant kind) — never flag it as an
+    error for lacking a Phase line or for "unconfirmed" biallelic status.
+{conclusions}
+
+ACMG SF actionable-gene findings (ground truth for section 3 below):
+{actionable_variants}
+
+Draft clinical conclusion to check:
+{draft}
+
+TASK: Check the draft above against the MOI-layer findings for factual
+contradictions, then output a corrected version.
+
+Specifically check for:
+- VARIANT IDENTITY VERBATIM CHECK (mandatory, do this FIRST, for every variant
+  named anywhere in the draft — sections 2, 3, and 4): compare the draft's
+  [GENE] ([HGVS]) string against that exact variant's own layer/base block
+  header line above, character for character (chromosome/position/ref/alt,
+  transcript, cDNA change, and protein change all included). A real past
+  failure: the source block's own header read "c.100G>A:p.W34X"
+  (nonsense/stop-gain — the same block's PVS1 justification explicitly cites
+  NMD) and the draft wrote "c.100G>A; p.Glu34Lys" — a fabricated missense
+  change contradicting the block's own PVS1 reasoning two sentences later. Any
+  character-level mismatch in the HGVS/protein notation, however minor it
+  looks (one amino acid, one digit, one nucleotide), is a HARD ERROR — replace
+  it with the source block's exact string. Do this independently of every
+  other check below; a variant can have a perfectly correct ACMG writeup and
+  still fail this check on its identity string alone.
+- NO ACMG SCORING (mandatory, sections 2, 4 and 5): the conclusion never
+  assigns, lists, or restates any ACMG criterion, strength, point value, point
+  total, or classification label for a finding — code inserts each
+  finding's criteria and total, copied from its own layer block, after this
+  pass. If the draft contains any criteria list, "**ACMG classification:**"
+  line, point value, classification label, or criterion code (PVS1, PS1-4,
+  PM1-6, PP1-5, BA1, BS1-4, BP1-7) in sections 2, 4 or 5, delete it. Never
+  add one, and never re-derive, re-check, or change a score yourself.
+- CITATIONS INLINE ONLY (mandatory): a citation, (PMID:XXXXXXXX) or a URL,
+  belongs inside the sentence it supports, right after the specific claim,
+  and only when that same claim carries it in the same variant's own layer
+  block. Delete any separate citations/references/sources list or section
+  (e.g. a "CITATIONS" heading or a trailing list of PMIDs), any PMID attached
+  to a sentence about a different gene or variant than the one it was cited
+  for in its source block, and any PMID mentioned without supporting a claim.
+- CLINVAR STATUS: code adds each finding's "CLINVAR: <value>" tag. Delete any
+  "CLINVAR: undefined" (or similar placeholder for a missing status) from the
+  draft; do not add CLINVAR tags yourself.
+- Any inheritance/segregation claim (de novo, maternal/paternal, carrier
+  status) in the draft that conflicts with what that variant's own layer
+  block states.
+- ALLELIC-BALANCE ARTIFACT/MOSAICISM CAVEAT CHECK (mandatory, do this for
+  every variant in section 2): re-read that variant's own layer/base block
+  Comment for any call-quality caveat about anomalously low or otherwise
+  inconsistent allelic balance (e.g. "AB=0.09 is well below the expected ~0.5
+  ... more consistent with a sequencing artifact or low-level mosaicism"). If
+  such a caveat exists in the source block but is absent from the draft's
+  section 2 paragraph for that variant, add it back verbatim in substance —
+  do not let a high ACMG classification (Likely Pathogenic/Pathogenic) stand
+  as an excuse to omit it; call quality and ACMG evidence strength are
+  independent axes and both must reach the reader.
+- Any other factual claim in the draft not traceable to the layer findings
+  above.
+- EXCLUDED-VARIANT PHENOTYPE-MATCH CHECK (mandatory, do this for every gene
+  the draft's Reasoning/STEP 0 section describes as NOT matching the
+  phenotype, lacking phenotype specificity, or otherwise not explaining the
+  presentation — even when that gene is correctly excluded from section 2):
+  read that gene's OWN layer/base block above and check whether it lists
+  PP4 among its applied criteria. A real past failure: the draft wrote
+  "homozygous GENE_X findings ... without phenotype match, failing to
+  explain the [phenotype]" for a gene whose own block explicitly applied
+  "PP4 Supporting (+1 pts): Patient phenotype ... is highly specific for
+  GENE_X-associated disease" a few paragraphs earlier in the same layer
+  findings — a direct self-contradiction. If the excluded gene's own block
+  DOES apply PP4, the draft may still exclude it from section 2 (e.g. for
+  insufficient segregation, weaker overall classification, or a competing
+  stronger finding), but it MUST NOT claim "no phenotype match" — rewrite
+  that sentence to state the real reason for exclusion (e.g. missing
+  segregation/PM3 confirmation, lower point total than the chosen variant)
+  instead of a phenotype-match denial the layer block itself contradicts.
+- MOI-LAYER TAG CONFIRMATION CHECK (mandatory, do this for every variant in
+  section 2 tagged "De novo" or "Dominant-inherited"): a variant is routed
+  into the DE NOVO LAYER or DOMINANT-INHERITED LAYER simply because its gene
+  is AD/AD_AR/XLD — landing in that layer is NOT itself proof the specific
+  mechanism was confirmed. Read that variant's own DE NOVO/DOMINANT-INHERITED
+  layer block: if tagged "De novo", its "De novo criteria applied:" line
+  must name PS2 or PM6 (delta > +0); if tagged "Dominant-inherited", its
+  criteria-applied line must show PP1 applied (delta > +0). If the block
+  instead says "None — de novo status not confirmed/not assessable" (or the
+  dominant-layer equivalent) with delta +0, the tag is WRONG — replace it
+  with "AD candidate, de novo unconfirmed" (or "... unassessed" if Parental
+  data: none) / "AD candidate, cosegregation unconfirmed", and fix any prose
+  elsewhere in the draft (including section 5's summary sentence) that
+  asserts de novo/inherited status as confirmed for that variant.
+- Two (or more) variants in the SAME gene, both with supporting evidence and
+  segregation consistent with biallelic inheritance (compound heterozygous),
+  that the draft frames as competing with each other (e.g. one "superior" or
+  "primary" over the other) instead of jointly causative. If found, rewrite
+  section 2 to list all such variants as co-causative, each preceded by its
+  gene name, per a compound-het/biallelic recessive model — do not keep a
+  single-winner framing for a gene with two qualifying trans variants.
+- DE NOVO + X-LINKED SAME-GENE CHECK: if both a DE NOVO layer block and an
+  X-LINKED layer block exist for the same gene/variant, they are not
+  competing diagnoses — a confirmed de novo occurrence (PS2) is independent,
+  stronger evidence of dominant mechanism than X-linked cosegregation (PP1,
+  which requires an affected mother and is irrelevant once de novo is already
+  confirmed). If the draft presents the X-LINKED layer's finding for this
+  variant as a separate or competing finding, rewrite it as the single DE
+  NOVO finding.
+- TRANS STATUS CHECK (recessive genes only, MANDATORY — do this for every
+  gene the draft calls "compound heterozygous" or "biallelic" as a PAIR of
+  two distinct variants; do NOT run this for a gene whose RECESSIVE block is
+  the "(confirmed homozygous, biallelic)" single-variant kind — see above,
+  it is exempt and its biallelic status is already correct — even if
+  everything else about the draft looks correct):
+  Step A: if a RECESSIVE layer block exists for that gene, read its own
+  "**Phase:**" line first — this is the authoritative, already-verified
+  value. Only if no RECESSIVE block exists for that gene (the draft is
+  claiming compound-het without one), fall back to finding each variant's
+  Segregation/parental-origin line within its own embedded base conclusion
+  and copy them EXACTLY as written, e.g.:
+    Variant 1 Segregation: "inherited from mother"
+    Variant 2 Segregation: "inherited from mother"
+  Step B: compare the two parent-of-origin values as plain strings.
+    - Both say the same single parent (e.g. both "mother", or both
+      "father") → CIS. The draft's compound-het claim is WRONG — this is a
+      HARD ERROR, not a style issue, regardless of how strong the ACMG
+      evidence or gene-disease mechanism looks. Two variants inherited from
+      the same parent sit on one allele; the other parent's allele is
+      wild-type at both positions, so biallelic/recessive inheritance is
+      NOT satisfied.
+    - Different parents (one "mother", one "father") → TRANS. Compound-het
+      claim is correct, leave as-is.
+    - One or both are "de novo" / "unknown" / "no parental data" → phase
+      UNKNOWN. Compound-het claim may stand, but the draft must note the
+      phase uncertainty.
+  Step C: if Step B found CIS, rewrite section 2 to drop the compound-het/
+  biallelic framing for that gene — fall back to a single causative variant
+  (pick the one with the stronger ACMG classification) or state the gene
+  has insufficient biallelic evidence, per the per-variant conclusions. Also
+  fix section 3's summary sentence to match (remove "compound heterozygous"
+  wording for that gene).
+- CAUSATIVE-THRESHOLD OMISSION CHECK (mandatory, do this for EVERY MOI layer
+  block above regardless of layer type — De Novo, Dominant-Inherited,
+  Recessive, X-Linked, Unclassified): the rule is a single uniform numeric
+  cutoff — any variant whose own layer/base block states a total ACMG point
+  value >= 6 (Likely Pathogenic or Pathogenic, Tavtigian et al. 2020) MUST
+  appear in section 2. Scan every layer block's own total-points line and
+  compare against section 2's variant list. A real past failure: a RECESSIVE
+  layer variant scored 9.5 points (Likely Pathogenic, e.g. via a reduced-
+  weight PM3 for unconfirmed segregation) and was left out of section 2
+  entirely — reasoning-only mention doesn't count — because a DIFFERENT
+  gene's variant scored higher (e.g. 11 points, Pathogenic) and the draft
+  treated that as a single winner. Scoring higher than another qualifying
+  variant is NEVER a valid reason to omit one that independently clears the
+  >=6 bar — both are independently causative unless one is excluded by one of
+  the OTHER named checks in this list (TRANS/CIS collapse, SINGLE-HIT
+  RECESSIVE CHECK, COMPOUND-HET JOINT THRESHOLD CHECK below, a stated factual
+  inconsistency in its own block). If you find a >=6-point variant missing
+  from section 2, ADD its full write-up (header line and prose paragraph —
+  no criteria, points, or classification; code inserts those) — do not just
+  name it in passing. Also fix section 5's summary sentence to name every
+  causative gene, not only the previously-sole one.
+  EXCEPTION — this check does NOT apply on its own to a single variant inside
+  a RECESSIVE "(compound heterozygous / biallelic)" PAIR block; see COMPOUND-
+  HET JOINT THRESHOLD CHECK below, which overrides this check for that block
+  kind specifically.
+- COMPOUND-HET JOINT THRESHOLD CHECK (mandatory, do this for every RECESSIVE
+  layer block of the "(compound heterozygous / biallelic)" PAIR kind — never
+  for the "(confirmed homozygous, biallelic)" single-variant kind, which is
+  exempt): that block already states its own backend-computed "**Joint
+  compound-het classification:**" line — this is the authoritative,
+  already-verified verdict; do not recompute it from the two variants'
+  individual totals yourself. A real past failure: Variant B in a pair scored
+  11 points (Pathogenic) while Variant A scored only 1 point (VUS); the draft
+  listed the pair in section 2 as "Pathogenic" causative because Variant B
+  alone cleared >=6, ignoring that Variant A's weak score means the second
+  hit required for a biallelic recessive diagnosis is not established. Read
+  the block's "**Joint compound-het classification:**" line:
+    - If it says CAUSATIVE: both variants belong in section 2 as co-causative,
+      exactly as the CAUSATIVE-THRESHOLD OMISSION CHECK above would otherwise
+      require.
+    - If it says COMPOUND VUS: neither variant may be listed in section 2 as
+      Pathogenic/Likely Pathogenic, REGARDLESS of what either variant's own
+      individual "Total ACMG points" line says — the joint line already
+      accounts for and overrides those individual totals for causative-
+      listing purposes. If the draft lists either variant in section 2 anyway,
+      remove it from section 2 (move to section 4 if its own individual total
+      is >= 4 and < 6 points, per the normal VUS rule; otherwise omit per the
+      SCOPE RULE), and fix section 5's summary sentence to match.
+- SINGLE-HIT RECESSIVE CHECK (mandatory, do this for every gene the draft
+  lists as causative with only ONE variant, even if everything else about
+  the draft looks correct): find that gene's inheritance mode and this
+  variant's zygosity/compound-het status in its own per-variant conclusion.
+  If the gene is autosomal recessive (AR) or X-linked recessive (XLR), the
+  variant is heterozygous, and no second variant/trans partner is
+  documented for that gene — the draft's causative claim for this variant
+  is WRONG, regardless of how strong its ACMG evidence looks. Remove this
+  variant from section 2. If no causative variant remains after removal,
+  state explicitly that no confirmed causative variant was found under a
+  recessive model (insufficient evidence — single heterozygous hit only),
+  and fix section 3's summary sentence to match.
+- DISEASE-NAME CHECK (mandatory, do this for EVERY gene the draft names as
+  causative, even if everything else about the draft looks correct): find
+  the specific disease/condition name the draft attributes to that gene in
+  section 2's prose (e.g. "the gene is a known cause of X"), and verify that
+  exact disease name appears in THAT gene's own layer block / embedded base
+  conclusion above — not in a different gene's block, and not merely implied
+  by a shared category phrase used earlier in the draft (e.g. "visual
+  impairment (retinitis pigmentosa or cone-rod dystrophy)" in the reasoning
+  section does NOT license attributing "retinitis pigmentosa" to every gene
+  discussed nearby — each gene keeps only the specific disease its own
+  evidence names). When multiple genes are listed together and share a broad
+  phenotype category, it is common for the draft to blur one gene's specific
+  named disease into a neighboring gene's paragraph — this is a HARD ERROR,
+  not a style issue, even when the borrowed disease name is phenotypically
+  plausible for the category. If a gene's paragraph names a disease not
+  found in that gene's own layer block, replace it with whatever disease
+  name (if any) that gene's own block actually states, or remove the
+  specific disease-name claim entirely if its own block doesn't name one.
+
+- BENIGN/OUT-OF-SCOPE MENTION CHECK (mandatory, scan the ENTIRE # Clinical
+  Conclusion section): the only variants permitted anywhere in that section
+  are causative variants (section 2), ACMG SF actionable findings from the
+  ground-truth list above (section 3), and VUS variants whose total ACMG
+  points are >= 4 AND < 6 per their own layer/base block (section 4) — 4,
+  4.5, 5, and 5.5 all count as in-range (half-point totals from a
+  reduced-weight PM3 delta are expected, not a mismatch); 6 itself is Likely
+  Pathogenic and belongs in section 2. If the draft names, describes, or even
+  mentions-as-excluded any variant classified Benign or Likely Benign, or any
+  VUS strictly outside [4, 6), delete that mention entirely (do not replace it
+  with an explanation of why it was removed — just remove it, as if it were
+  never written). Conversely, if a variant scoring 4.5 or 5.5 was dropped from
+  section 4 and only survives as an unscoped mention elsewhere (e.g. section
+  5's summary sentence), that is the OPPOSITE error — move it into section 4
+  properly instead of deleting it.
+- ACTIONABLE SECTION CHECK (mandatory): every variant listed in section 3
+  must appear in the ACMG SF ground-truth list above, with matching gene,
+  condition, and classification. Remove any section-3 entry not in the
+  ground-truth list. Add any ground-truth entry missing from section 3
+  (using the brief one-line format, or a cross-reference to section 2 if the
+  same variant is already written up there). If the ground-truth list says
+  "None" and section 3 lists variants anyway, replace section 3 with "None
+  identified."
+- NOTABLE VUS CHECK (mandatory): every variant listed in section 4 must have
+  a layer/base block above stating a total ACMG point value that is >= 4 AND
+  < 6 (4, 4.5, 5, or 5.5 — a half-point total from a reduced-weight PM3 delta
+  counts as in-range) AND a classification of "Uncertain significance"/"VUS".
+  Remove any section-4 entry whose own block shows a point total outside
+  [4, 6) or a different classification. If section 4 is missing (or says
+  "None identified") while a qualifying VUS in [4, 6) exists in the layer
+  findings above — including a 4.5- or 5.5-point one — add it; do not let it
+  surface only in section 5's summary sentence instead.
+
+If you find no contradictions, output the draft unchanged.
+If you find contradictions, output a corrected version with the same
+structure (# Reasoning, # Clinical Conclusion, same numbered sections) —
+fix only the incorrect claims, keep everything else as written.
+
+Output ONLY the final corrected text (# Reasoning ... # Clinical Conclusion
+...). Do not explain what you changed, do not add commentary before or
+after it.

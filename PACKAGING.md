@@ -5,8 +5,8 @@ ServerQwen ships as two independently installable packages, split along
 
 | Package | What it is | Needs a GPU? |
 |---|---|---|
-| [`genova2i-gpu.def`](#1-gpu--hpc-package-apptainersingularity) | Apptainer/Singularity image: Python 3.11 + vLLM + the CUDA stack vLLM's own wheels bring + the pipeline's Python deps | Yes — this is the model-serving side |
-| [`webapp/`](#2-webapp-package-pip-installable) | pip package `genova2i-webapp`: the FastAPI web UI in `proxy` mode only (fastapi/uvicorn/httpx, no torch/vLLM/CUDA) | No — talks to package 1 over HTTP |
+| [`iva-gpu.def`](#1-gpu--hpc-package-apptainersingularity) | Apptainer/Singularity image: Python 3.11 + vLLM + the CUDA stack vLLM's own wheels bring + the pipeline's Python deps | Yes — this is the model-serving side |
+| [`webapp/`](#2-webapp-package-pip-installable) | pip package `iva-webapp`: the FastAPI web UI in `proxy` mode only (fastapi/uvicorn/httpx, no torch/vLLM/CUDA) | No — talks to package 1 over HTTP |
 
 Run both on the same GPU node for a self-contained deployment, or run
 package 2 anywhere (laptop, login node, a separate lightweight VM) pointed
@@ -17,7 +17,7 @@ at package 1 running on a cluster — same split `launch_qwen.sh`'s
 
 ## 1. GPU / HPC package (Apptainer/Singularity)
 
-`genova2i-gpu.def` builds the **runtime environment only** — no pipeline
+`iva-gpu.def` builds the **runtime environment only** — no pipeline
 code and no model weights are baked in, so the image is a fixed ~7.6GB
 regardless of code changes or which model you point vLLM at.
 
@@ -25,18 +25,18 @@ regardless of code changes or which model you point vLLM at.
 
 ```bash
 module load apptainer          # or your cluster's module name for it
-apptainer build --fakeroot genova2i-gpu.sif genova2i-gpu.def
+apptainer build --fakeroot iva-gpu.sif iva-gpu.def
 ```
 
 Takes several minutes — it builds a full conda env (`vllm`, `torch`,
 `transformers`, and everything else in
-`Qwen_Engine_GENOVA2I/env_vllm_0606/env_vllm_pipeline_0606.yml`, the same
+`Qwen_Engine_IVA/env_vllm_0606/env_vllm_pipeline_0606.yml`, the same
 file the current conda-based deployment uses). No GPU needed to build,
 only to run.
 
 ### Get the code and model weights in at run time
 
-- **Pipeline code** (`Qwen_Engine_GENOVA2I/genova_vllm_556_0610/`,
+- **Pipeline code** (`Qwen_Engine_IVA/IVA_vllm/`,
   `prompts/`) — bind-mount the repo; Apptainer auto-binds your `$HOME` and
   current directory by default, so running from inside the repo checkout
   usually needs no extra flag. On Curnagl, if your checkout lives under
@@ -53,7 +53,7 @@ only to run.
 ### Run vLLM (on a GPU node — `--nv` maps the host driver in)
 
 ```bash
-apptainer exec --nv genova2i-gpu.sif \
+apptainer exec --nv iva-gpu.sif \
     vllm serve Qwen/Qwen3.5-9B \
     --dtype bfloat16 --max-model-len 32768 \
     --gpu-memory-utilization 0.90 --port 38103 --enable-prefix-caching
@@ -62,9 +62,9 @@ apptainer exec --nv genova2i-gpu.sif \
 ### Run the pipeline's own FastAPI server (`direct` mode)
 
 ```bash
-cd Qwen_Engine_GENOVA2I/genova_vllm_556_0610
+cd Qwen_Engine_IVA/IVA_vllm
 export VLLM_BASE_URL=http://localhost:38103
-apptainer exec --nv /path/to/genova2i-gpu.sif \
+apptainer exec --nv /path/to/iva-gpu.sif \
     uvicorn server:app --host 0.0.0.0 --port 8000
 ```
 
@@ -89,7 +89,7 @@ pip install ./webapp
 
 Or from the wheel attached to a GitHub Release (no repo checkout needed):
 ```bash
-pip install genova2i_webapp-0.1.0-py3-none-any.whl
+pip install iva_webapp-0.1.0-py3-none-any.whl
 ```
 
 ### Run
@@ -97,7 +97,7 @@ pip install genova2i_webapp-0.1.0-py3-none-any.whl
 ```bash
 export PIPELINE_SERVER_URL=http://localhost:8000   # wherever package 1's FastAPI server is reachable
 export PORT=8002
-genova2i-webapp
+iva-webapp
 ```
 
 Then open `http://localhost:8002` — or tunnel from a laptop to wherever
@@ -109,7 +109,7 @@ ssh -N -L 8002:<node>:8002 <user>@curnagl.dcsr.unil.ch
 ### Note on `results/`
 
 The webapp writes saved reports to a `results/` directory next to wherever
-`genova2i_webapp` is installed (same behavior `server_qwen.py` has always
+`iva_webapp` is installed (same behavior `server_qwen.py` has always
 had). If you `pip install` it into a shared site-packages, be aware
 reports land there, not in your working directory.
 

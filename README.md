@@ -54,7 +54,7 @@ Login node (cluster login host)
      ▼
 Compute node (dnagpuXXX) :8002  ←── server_qwen.py (FastAPI/uvicorn)
      │
-     ├── direct mode  →  pipeline module (Qwen_Engine_GENOVA2I/genova_vllm_556_0610)  →  vLLM :38103
+     ├── direct mode  →  pipeline module (Qwen_Engine_IVA/IVA_vllm)  →  vLLM :38103
      └── proxy mode   →  pipeline HTTP server :8000  →  vLLM :38103
 ```
 
@@ -72,7 +72,7 @@ The server **cannot be accessed directly from outside the cluster**. All browser
 | `test_server.py` | Integration test suite |
 | `requirements.txt` | Python deps: `fastapi`, `uvicorn`, `httpx`, `python-multipart` |
 | `templates/index.html` | Single-page web UI |
-| `Qwen_Engine_GENOVA2I/` | Self-contained copy of the pipeline (`genova_vllm_556_0610/`) + its conda env (`env_vllm_0606/`) — see [Pipeline Location](#pipeline-location) below |
+| `Qwen_Engine_IVA/` | Self-contained copy of the pipeline (`IVA_vllm/`) + its conda env (`env_vllm_0606/`) — see [Pipeline Location](#pipeline-location) below |
 | `results/` | Saved pipeline output reports (`<stem>_<timestamp>/report.txt`) |
 | `.connection` | Written by `launch_qwen.sh` — contains compute node name and port |
 | `server_qwen_<JOBID>.log` | Per-SLURM-job log (stdout + stderr merged) |
@@ -82,7 +82,7 @@ The server **cannot be accessed directly from outside the cluster**. All browser
 
 ## Pipeline Location
 
-The pipeline package and its conda env live **inside ServerQwen**, at `Qwen_Engine_GENOVA2I/genova_vllm_556_0610` and `Qwen_Engine_GENOVA2I/env_vllm_0606` — a self-contained copy, not a reference to the original `eric_folder/genova_vllm_556_0610` (which is a separate, independently-tracked repo). ServerQwen only ever reads/edits its own copy under `Qwen_Engine_GENOVA2I/` — the two are not kept in sync automatically; a change made in one does not appear in the other unless copied over manually.
+The pipeline package and its conda env live **inside ServerQwen**, at `Qwen_Engine_IVA/IVA_vllm` and `Qwen_Engine_IVA/env_vllm_0606` — a self-contained copy, not a reference to the original `eric_folder/genova_vllm_556_0610` (which is a separate, independently-tracked repo). ServerQwen only ever reads/edits its own copy under `Qwen_Engine_IVA/` — the two are not kept in sync automatically; a change made in one does not appear in the other unless copied over manually.
 
 All paths are self-resolving, not hardcoded to a specific user/checkout location:
 - `launch_qwen.sh` derives its own directory from `$SLURM_SUBMIT_DIR` (falls back to `$(pwd)`)
@@ -96,7 +96,7 @@ So the whole `ServerQwen/` folder can be relocated or checked out anywhere witho
 
 | Mode | How it works | When to use |
 |------|-------------|-------------|
-| `direct` (default on cluster) | Imports the pipeline Python package directly from `Qwen_Engine_GENOVA2I/genova_vllm_556_0610`; runs it in a thread with its own event loop | Full analysis on GPU node |
+| `direct` (default on cluster) | Imports the pipeline Python package directly from `Qwen_Engine_IVA/IVA_vllm`; runs it in a thread with its own event loop | Full analysis on GPU node |
 | `proxy` | Delegates to a separate pipeline HTTP server at `PIPELINE_SERVER_URL` (default `http://localhost:8000`) | When a pipeline server is already running separately |
 
 Auto-falls back to `proxy` if the pipeline module is not importable.
@@ -208,7 +208,7 @@ pathogenic variant in one of these genes is reported regardless of relevance to 
 patient's phenotype and regardless of proband/parental origin — it cannot be filtered
 out by triage. When one or more such variants are found, the report gains an
 `ACTIONABLE VARIANTS (ACMG SF)` section after the Clinical Conclusion. See the pipeline
-README (`Qwen_Engine_GENOVA2I/genova_vllm_556_0610/README.md`) for implementation
+README (`Qwen_Engine_IVA/IVA_vllm/README.md`) for implementation
 detail and `SOP_ACMG_SF.md` for the clinical procedure.
 
 ---
@@ -226,7 +226,7 @@ sbatch launch_qwen.sh
 `launch_qwen.sh` will:
 1. Allocate 1 GPU node (`gpu` partition, 4 CPUs, 16 GB RAM, 1 GPU, 12 h)
 2. Load `miniforge3` + `cuda` modules via `dcsrsoft use 20241118`
-3. Activate conda env at `Qwen_Engine_GENOVA2I/env_vllm_0606`
+3. Activate conda env at `Qwen_Engine_IVA/env_vllm_0606`
 4. **Clear stale processes** on ports `VLLM_PORT`, `PORT`, `PIPELINE_PORT` (`fuser -k`) — cleans up leftovers from a prior job that ran on the same compute node and didn't shut down cleanly
 5. Start vLLM serving `Qwen/Qwen3.5-9B` (bfloat16, 32k context, 90% GPU mem) on port **38103** in the background
 6. **Start ServerQwen via uvicorn on port 8002 immediately** — does not wait for vLLM. The web UI is reachable within seconds of job start.
@@ -333,7 +333,7 @@ One-time setup (login node):
 $PROJECT_ROOT/.venv_qwen/bin/pip install -r requirements.txt
 ```
 
-The full pipeline (direct mode) uses the conda env at `Qwen_Engine_GENOVA2I/env_vllm_0606`, which already includes vLLM and all pipeline dependencies.
+The full pipeline (direct mode) uses the conda env at `Qwen_Engine_IVA/env_vllm_0606`, which already includes vLLM and all pipeline dependencies.
 
 ---
 
@@ -387,6 +387,6 @@ Results persist on disk regardless of server restarts. In-memory jobs expire aft
 - Python 3.10+
 - `fastapi`, `uvicorn`, `httpx`, `python-multipart`
 - vLLM serving `Qwen/Qwen3.5-9B` on port 38103 (direct mode)
-- Pipeline package at `Qwen_Engine_GENOVA2I/genova_vllm_556_0610` (direct mode)
-- Conda env at `Qwen_Engine_GENOVA2I/env_vllm_0606` (contains vLLM + pipeline deps)
+- Pipeline package at `Qwen_Engine_IVA/IVA_vllm` (direct mode)
+- Conda env at `Qwen_Engine_IVA/env_vllm_0606` (contains vLLM + pipeline deps)
 - venv at `.venv_qwen` (contains FastAPI server deps)

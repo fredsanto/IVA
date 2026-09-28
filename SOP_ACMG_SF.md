@@ -1,7 +1,7 @@
 # SOP — ACMG Secondary Findings (Actionable Variants) Reporting
 
 **Scope:** clinical/lab staff reviewing ServerQwen variant analysis reports.
-**System component:** `Qwen_Engine_GENOVA2I/genova_vllm_556_0610` pipeline,
+**System component:** `Qwen_Engine_IVA/IVA_vllm` pipeline,
 `ACTIONABLE VARIANTS (ACMG SF)` report section.
 
 ---
@@ -118,10 +118,10 @@ When ACMG publishes a new SF version:
 1. Fetch the updated table from
    [ncbi.nlm.nih.gov/clinvar/docs/acmg](https://www.ncbi.nlm.nih.gov/clinvar/docs/acmg/).
 2. Update `ACMG_SF_CONDITIONS` in
-   `Qwen_Engine_GENOVA2I/genova_vllm_556_0610/pipeline/core/acmg_sf.py`
+   `Qwen_Engine_IVA/IVA_vllm/pipeline/core/acmg_sf.py`
    (gene → condition mapping; `ACMG_SF_GENES` derives from its keys).
 3. Update the version number referenced in this SOP and in
-   `Qwen_Engine_GENOVA2I/genova_vllm_556_0610/README.md`.
+   `Qwen_Engine_IVA/IVA_vllm/README.md`.
 4. Re-run existing test cases to confirm the new/removed genes are picked
    up correctly.
 

@@ -3,7 +3,7 @@ requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "genova2i-webapp"
+name = "iva-webapp"
 version = "0.1.0"
 description = "ServerQwen web UI / proxy client — talks to the GPU-side pipeline server over HTTP, no torch/vLLM/CUDA dependency."
 requires-python = ">=3.11"
@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-genova2i-webapp = "genova2i_webapp.server:main"
+iva-webapp = "iva_webapp.server:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
@@ -24,4 +24,4 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-genova2i_webapp = ["templates/*.html"]
+iva_webapp = ["templates/*.html"]

@@ -1,0 +1,97 @@
+MOI LAYER: DOMINANT-INHERITED ANALYSIS
+
+This variant's gene has a dominant-relevant inheritance mode (AD, AD_AR, or
+XLD). This layer checks specifically for INHERITED dominant transmission
+(as opposed to de novo, which is a separate layer) — do NOT re-evaluate or
+re-score anything already covered in the BASE CONCLUSION below (molecular
+mechanism, frequency, in-silico evidence, PVS1/PM1/PM2/PM5/PP3/PP4/BA1/BS1/
+BS4/BP1/BP7). This layer only ADDS a cosegregation-specific criterion on top
+of that base score.
+
+BASE CONCLUSION (already scored — ground truth, do not recompute):
+{base_conclusion}
+
+SEGREGATION (backend-determined from allelic balance — do not re-derive):
+{segregation_block}
+
+ALLELIC BALANCE CONFIRMATION (backend-determined — do not re-derive):
+{ab_confirmation_block}
+
+TASK:
+
+1. This variant only qualifies for inherited-dominant analysis if SEGREGATION
+   above is "maternal" or "paternal" (i.e. genuinely inherited from one
+   identified parent, not de novo, not both-carriers/homozygous-parent). If
+   SEGREGATION is anything else, state explicitly that this variant does not
+   fit the inherited-dominant pattern and do not apply PP1.
+
+2. ALLELIC BALANCE CONFIRMATION above states whether BOTH the proband's own
+   AB and the transmitting parent's AB independently show a heterozygous
+   (~0.5) ratio. This is a QC/confidence gate on the het call itself — if
+   either is NOT confirmed heterozygous, do not proceed to apply PP1; state
+   the discrepancy explicitly instead.
+
+3. If segregation and AB confirmation both hold, examine the evidence for
+   whether the transmitting parent (or other relatives) is described as
+   AFFECTED with a matching/consistent phenotype (cosegregation). State
+   explicitly what family-history evidence IS present in the retrieved
+   text — do not invent a structured affected/unaffected status if the
+   evidence is silent on it. Only apply PP1 [Supporting, +1] if the evidence
+   affirmatively supports cosegregation with disease in the transmitting
+   parent (or other affected relatives); prefer recent, larger segregation
+   studies over older single-family reports when both are present. If the
+   evidence is silent or ambiguous on parental phenotype, do NOT apply PP1 —
+   state that cosegregation could not be confirmed from available evidence.
+
+   UNCONFIRMED/SUSPECTED PARENTAL PHENOTYPE: if the family-history text
+   describes the transmitting parent with a SUSPECTED, POSSIBLE, or
+   not-yet-confirmed diagnosis matching the patient's condition (e.g.
+   "suspicion of X", "possible X", "query X") rather than a confirmed
+   diagnosis — treat this the same direction as an AFFECTED parent for
+   cosegregation purposes (apply PP1 [Supporting, +1] if otherwise
+   applicable; do NOT apply BS2/DEFAULT-UNAFFECTED POLICY against this
+   parent — an explicitly suspected-affected parent is not a clean
+   unaffected carrier). This is weaker evidence than a confirmed diagnosis,
+   so it must never be silently upgraded to full confirmed-cosegregation
+   language. Always add one explicit sentence to the Comment below flagging
+   this: state plainly that the parent's phenotype is SUSPECTED/UNCONFIRMED
+   and that definitive interpretation of this finding is PENDING CLINICAL
+   CONFIRMATION of the parent's phenotype. This caveat must survive into
+   the Comment field verbatim in substance — it is what tells the final
+   report reader this call rests on an unconfirmed parental diagnosis.
+
+4. Check the BASE CONCLUSION's own ACMG criteria list above for whether BS4
+   (lack of segregation) was already applied there. If it was, do not
+   re-derive BS4 here — factor the existing base BS4 into your PP1 judgment
+   and explicitly reconcile any conflict (e.g. if base BS4 was applied but
+   this layer's evidence now supports cosegregation, say so).
+
+DO NOT write "Base ACMG criteria", "Base ACMG points", or "Total ACMG
+points" yourself — the base criteria block is spliced in by the pipeline
+straight from the BASE CONCLUSION, and the Total is computed by code as base
++ your delta line. Your job here is ONLY this layer's own criterion and its
+delta line. Never add, drop, or restate a base criterion (PP4 included) at
+this layer; anything you write about base scoring is deleted.
+
+Use exactly this format:
+
+# Dominant-Inherited Analysis — [GENE] ([HGVS])
+**Segregation:** [copy the backend-determined value verbatim from above]
+**Allelic balance confirmation:** [copy the backend-determined confirmation verbatim from above]
+**Family-history evidence:** [what IS present in the evidence about the transmitting parent/relatives' phenotype, or "no family-history evidence available"]
+**Dominant criteria applied:**
+- [PP1, if applicable, with strength/points and one-sentence justification]
+[or: "None — cosegregation not confirmed from available evidence"]
+**Dominant delta:** [+1 / +0]
+**Comment:** [1-2 sentences]
+
+Classification thresholds (sum of applied points, same as base layer):
+- Pathogenic: ≥ 10
+- Likely Pathogenic: 6 to 9
+- Uncertain Significance (VUS): 0 to 5
+- Likely Benign: -1 to -6
+- Benign: ≤ -7
+
+CITATIONS ARE MANDATORY: every claim traceable to a source in the base conclusion or variant context above (including citations already present there) MUST be cited/carried forward inline using (PMID:XXXXXXXX) or a bare URL. Do not write an uncited claim when its source is available above. Do not introduce new evidence not already present in the base conclusion or variant context above.
+
+CITATIONS FORMAT: citations appear inline only — (PMID:XXXXXXXX) or a URL placed inside the sentence it supports, right after the specific claim. Never write a separate CITATIONS, References, or Sources list or section, and never cite a PMID in a sentence about a different gene or variant than the one it supports.

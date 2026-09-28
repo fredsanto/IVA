@@ -1,0 +1,82 @@
+MOI LAYER: RECESSIVE — CONFIRMED HOMOZYGOUS (BIALLELIC, SINGLE VARIANT)
+
+Gene: {gene}
+
+This gene has a recessive-relevant inheritance mode (AR, XLR, AD_AR, or
+XLD_XLR). The variant below is CONFIRMED HOMOZYGOUS (Zygosity field reads
+homozygous) — it explains the recessive phenotype on its own, since both
+alleles carry the same variant. There is no second, different variant in
+trans; this is NOT a compound-heterozygous case. Do NOT re-evaluate or
+re-score anything already covered in the BASE CONCLUSION (molecular
+mechanism, frequency, in-silico evidence, PVS1/PM1/PM2/PM5/PP3/PP4/BA1/BS1/
+BS4/BP1/BP7). This layer only documents that the biallelic/recessive
+mechanism is satisfied by homozygosity and applies PM3 at a REDUCED,
+homozygous-specific weight per the rules below (never the full +2 Moderate
+weight used for compound-het PM3 — that weight assumes two independently
+arising variants, which homozygosity does not).
+
+VARIANT — {variant_label}
+BASE CONCLUSION (already scored — ground truth):
+{variant_base_conclusion}
+
+SEGREGATION (backend-determined from parental allelic-balance data, mandatory
+hard gate already enforced — do not re-derive or second-guess): {segregation_block}
+
+{cross_analysis_block}
+
+TASK:
+
+1. Confirm explicitly that the recessive/biallelic requirement for this gene
+   is satisfied: the proband is homozygous for this single variant, so both
+   copies of the gene carry the pathogenic-candidate allele. State this
+   plainly — do not treat it as uncertain or in need of a second variant.
+
+2. PM3 for homozygous variants — apply per ClinGen SVI guidance, using the
+   backend-determined SEGREGATION result above as a hard gate:
+
+   a. If SEGREGATION reports a parent who is THEMSELVES homozygous for this
+      variant (an "unaffected" carrier parent should be heterozygous, not
+      homozygous) — do NOT apply PM3. This segregation pattern is
+      discordant with simple biallelic recessive transmission from two
+      carrier parents; state this explicitly in the Comment and do not
+      award any points for it. Recessive delta: +0.
+
+   b. Otherwise (parents confirmed heterozygous carriers, or parental data
+      insufficient/not available — SEGREGATION does not show a
+      contradiction): apply PM3_Supporting, +1. Per ClinGen SVI one
+      homozygous affected proband counts 0.5 PM3 case points, which is the
+      PM3_Supporting strength = +1 on this pipeline's point scale.
+      Consanguinity does not lower this: when not confirmed it is assumed,
+      and the Supporting weight already allows for identity-by-descent.
+
+3. State explicitly what evidence is present (or absent) about parental
+   consanguinity or carrier status. Do not invent this if the evidence is
+   silent; state "no parental/consanguinity data available" if so.
+
+DO NOT write "Base ACMG criteria", "Base ACMG points", or "Total ACMG
+points" yourself — the base criteria block is spliced in by the pipeline
+straight from the BASE CONCLUSION, and the Total is computed by code as base
++ your delta line. Your job here is ONLY this layer's own criterion and its
+delta line. Never add, drop, or restate a base criterion (PP4 included) at
+this layer; anything you write about base scoring is deleted.
+
+Use exactly this format:
+
+# Recessive Analysis (confirmed homozygous, biallelic) — [GENE] ([HGVS])
+**Zygosity:** Homozygous — both alleles carry this variant; biallelic requirement satisfied without need for a second variant.
+**Parental carrier / consanguinity status:** [what evidence IS present, or "no parental/consanguinity data available"]
+**Recessive criteria applied:** [PM3 [Supporting, +1] — homozygous occurrence in an affected proband; consanguinity unconfirmed, assumed] OR [None — parent is themselves homozygous, segregation discordant with simple biallelic transmission]
+**Recessive delta:** [+1 / +0]
+
+**Comment:** [2-3 sentences confirming the recessive mechanism is satisfied by homozygosity, stating which PM3 weight was applied and why]
+
+Classification thresholds (sum of applied points, same as base layer):
+- Pathogenic: ≥ 10
+- Likely Pathogenic: 6 to 9
+- Uncertain Significance (VUS): 0 to 5
+- Likely Benign: -1 to -6
+- Benign: ≤ -7
+
+CITATIONS ARE MANDATORY: every claim traceable to a source in the base conclusion or context above (including citations already present there) MUST be cited/carried forward inline using (PMID:XXXXXXXX) or a bare URL. Do not write an uncited claim when its source is available above. Do not introduce new evidence not already present above.
+
+CITATIONS FORMAT: citations appear inline only — (PMID:XXXXXXXX) or a URL placed inside the sentence it supports, right after the specific claim. Never write a separate CITATIONS, References, or Sources list or section, and never cite a PMID in a sentence about a different gene or variant than the one it supports.

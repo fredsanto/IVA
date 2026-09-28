@@ -812,7 +812,12 @@ async def activity_stream(job_id: str, request: Request):
     )
 
 
-if __name__ == "__main__":
+def main() -> None:
+    """Console-script entry point (`iva-webapp`)."""
     import uvicorn
     port = int(os.environ.get("PORT", "8002"))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
+
+if __name__ == "__main__":
+    main()

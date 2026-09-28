@@ -1,0 +1,74 @@
+Bootstrap: docker
+From: condaforge/miniforge3:24.9.2-0
+
+%labels
+    Application ServerQwen GPU pipeline environment
+    Pipeline Qwen3.5-9B variant analysis (vLLM)
+
+%files
+    Qwen_Engine_IVA/env_vllm_0606/env_vllm_pipeline_0606.yml /opt/env_vllm_pipeline_0606.yml
+
+%post
+    set -eu
+    apt-get update
+    apt-get install -y --no-install-recommends curl ca-certificates
+    rm -rf /var/lib/apt/lists/*
+
+    # Single source of truth for the pipeline's Python deps is the existing,
+    # team-maintained env_vllm_pipeline_0606.yml (same file launch_qwen.sh's
+    # `conda activate` path already uses) — built here instead of re-pinned,
+    # so updating that one file is enough to rebuild an in-sync image; no
+    # separate lockfile to drift out of sync with it.
+    conda env create -f /opt/env_vllm_pipeline_0606.yml -n env-vllm-pipeline
+    conda clean -afy
+
+%environment
+    export PYTHONUNBUFFERED=1
+    export LC_ALL=C.UTF-8
+    export PATH=/opt/conda/envs/env-vllm-pipeline/bin:$PATH
+
+%runscript
+    exec "$@"
+
+%help
+    ServerQwen GPU-side runtime environment: Python 3.11 + vLLM + the CUDA
+    stack vLLM's own wheels bring (nvcc/cudnn/nccl/cutlass — no host CUDA
+    module needed) + the pipeline's Python dependencies, built from
+    Qwen_Engine_IVA/env_vllm_0606/env_vllm_pipeline_0606.yml.
+
+    This image is the RUNTIME ENVIRONMENT ONLY. Neither the pipeline code
+    nor the model weights are baked in — both are fetched/mounted at run
+    time, so this .sif stays small (image is ~7.6GB of Python/CUDA packages
+    only) and works for any model or code revision without a rebuild:
+
+      - Pipeline code (Qwen_Engine_IVA/IVA_vllm/, prompts/)
+        — bind-mount the repo at run time:
+            apptainer exec --nv --bind /work/PRTNR/...:/work/PRTNR/... \
+                iva-gpu.sif vllm serve Qwen/Qwen3.5-9B --dtype bfloat16 ...
+
+      - Model weights (Qwen/Qwen3.5-9B, ~18GB) — downloaded by vLLM from
+        the Hugging Face Hub on first run via the huggingface_hub client
+        library baked into this image; the weights themselves are never
+        part of the build. Apptainer bind-mounts the real $HOME by default,
+        so the download lands in $HOME/.cache/huggingface and is reused on
+        every subsequent run — no re-download per job. On Curnagl, point
+        HF_HOME at shared project storage instead of $HOME (quota) before
+        the first run, e.g.:
+            export HF_HOME=/work/PRTNR/.../ServerQwen/.hf_cache
+        Pre-warm the cache once via `huggingface-cli download Qwen/Qwen3.5-9B`
+        (inside the container) if you want the first `vllm serve` on a GPU
+        node to skip the download entirely.
+
+    Build (on a node with internet access, e.g. login node):
+        apptainer build iva-gpu.sif iva-gpu.def
+
+    Run vLLM on a GPU node (--nv maps the host NVIDIA driver in):
+        apptainer exec --nv iva-gpu.sif \
+            vllm serve Qwen/Qwen3.5-9B --dtype bfloat16 \
+            --max-model-len 32768 --gpu-memory-utilization 0.90 \
+            --port 38103 --enable-prefix-caching
+
+    Run the pipeline's own FastAPI server (direct mode) the same way, from
+    inside Qwen_Engine_IVA/IVA_vllm/:
+        apptainer exec --nv iva-gpu.sif \
+            uvicorn server:app --host 0.0.0.0 --port 8000

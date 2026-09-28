@@ -1,0 +1,150 @@
+MOI LAYER: RECESSIVE / COMPOUND-HETEROZYGOUS ANALYSIS
+
+Gene: {gene}
+
+This gene has a recessive-relevant inheritance mode (AR, XLR, AD_AR, or
+XLD_XLR) with two candidate variants. The TRANS phase check below has
+ALREADY been computed and enforced in Python before this analysis ran — a
+CIS pair never reaches this stage at all. Do NOT re-evaluate or re-score
+anything already covered in either variant's BASE CONCLUSION (molecular
+mechanism, frequency, in-silico evidence, PVS1/PM1/PM2/PM5/PP3/PP4/BA1/BS1/
+BS4/BP1/BP7) — the only criterion this layer adds is PM3, per step 2 below.
+
+PHASE (backend-determined, mandatory hard gate already enforced — do not
+re-derive or second-guess): {phase_block}
+
+VARIANT A — {variant_a_label}
+BASE CONCLUSION (already scored — ground truth):
+{variant_a_base_conclusion}
+
+VARIANT B — {variant_b_label}
+BASE CONCLUSION (already scored — ground truth):
+{variant_b_base_conclusion}
+
+{cross_analysis_block}
+
+TASK:
+
+1. Both variants are jointly required to explain a recessive phenotype under
+   this model — they are CO-CAUSATIVE, not competing. Do not rank one as
+   "superior" to the other or pick a single "primary" variant.
+
+2. PM3 [Moderate, +2]: PHASE GATE FIRST, MANDATORY — PM3's own ACMG definition
+   (Richards et al. 2015) is "detected in trans with a pathogenic variant";
+   confirmed trans phase is part of the criterion itself, not a separate,
+   skippable nicety. The Python gate above only blocks a confirmed CIS pair
+   from reaching this stage — it deliberately still lets a pair with UNKNOWN
+   phase through (no parental data to determine it either way), because that
+   pair may still be reportable as two independent findings. Two sub-cases:
+
+   (a) PHASE line reads "TRANS confirmed": PM3 applies normally as a firm
+   criterion. Check each variant's partner's classification explicitly
+   before applying PM3 to it — a partner that is only VUS or weaker does not
+   support PM3 for the other variant even under confirmed trans. It is
+   possible for PM3 to apply to both, one, or neither variant depending on
+   each partner's own base classification. Classification is final/confirmed
+   in this sub-case — use the ordinary labels (Pathogenic / Likely
+   Pathogenic / VUS / etc.) with no hedge.
+
+   (b) PHASE line reads "UNKNOWN" (singleton or unresolved trio, no way to
+   determine cis/trans): PM3 [Moderate, +2] MAY be applied to a variant AS A
+   HYPOTHESIS, but ONLY when its partner independently reaches Likely
+   Pathogenic or Pathogenic on its own BASE CONCLUSION alone (before any
+   recessive-layer points) — a weak or VUS-level partner still does not
+   support even a hypothetical PM3. When applied this way: (i) label the
+   criterion itself "PM3 (hypothesis — trans phase not confirmed)" in the
+   criteria list rather than a bare "PM3"; (ii) the resulting total/label for
+   that variant must read "Potential Pathogenic" or "Potential Likely
+   Pathogenic" (never the bare, unqualified label) — this is a conditional
+   classification pending phase confirmation, not a diagnostic one; (iii)
+   this does NOT replace step 5's singleton recommendation below — a
+   variant carrying a hypothesis-only PM3 still requires explicit advice
+   that segregation/phasing testing is needed to convert "Potential" into a
+   confirmed classification. An unconfirmed phase could just as easily be
+   cis (both changes on the same chromosome copy, leaving the other
+   parental copy intact — no biallelic disruption at all), which is exactly
+   why the hypothesis framing and the "Potential" qualifier must both be
+   preserved rather than silently upgrading to a firm call. A real past
+   failure (illustrative — GENE_X standing in for whatever gene triggers
+   this pattern): a variant with Allelic_balance_mother=0 and
+   Allelic_balance_father=0 (i.e. apparently de novo, not inherited from
+   either parent) was narrated as "inherited from mother, implied by the
+   segregation pattern" — a fabricated genotype with no support in the
+   actual AB data — used to manufacture a trans story and justify applying
+   PM3 as if confirmed. A de novo variant's phase relative to a separately-
+   inherited variant in the same gene is NOT determinable from trio
+   allelic-balance data at all (a de novo mutation lands on a random
+   chromosome copy, not deterministically on the one opposite an inherited
+   allele) — this should have been "Phase: UNKNOWN" handled under sub-case
+   (b) above (hypothesis PM3 + "Potential" label + recommendation), not an
+   invented parent-of-origin used to grant a firm, unqualified PM3.
+
+3. BASE CRITERIA ARE FIXED: each variant's base criteria (PP4 included)
+   come from its own BASE CONCLUSION and are spliced in by code. Do not add,
+   drop, or restate any base criterion at this layer — only PM3.
+
+4. State explicitly what evidence is present (or absent) supporting the
+   parents as unaffected carriers — each parent transmitting one variant in
+   heterozygous state without being clinically affected themselves is the
+   expected recessive pattern. Do not invent this if the evidence is silent;
+   state "no parental phenotype data available" if so.
+
+5. SINGLETON RECOMMENDATION, MANDATORY WHEN IT APPLIES: check both variants'
+   own Allelic_balance_mother and Allelic_balance_father fields (in their
+   BASE CONCLUSION context above). If BOTH are absent/NA for BOTH variants —
+   i.e. no parental sample was sequenced at all, not merely an ambiguous
+   trio reading — this is a singleton, and Phase reading "UNKNOWN" here
+   means phase is structurally unknowable from this data, not just
+   uncertain this one time. Applying a hypothesis-only PM3 under step 2(b)
+   is not a substitute for this: you MUST also add an explicit
+   **Recommendation** line advising that parental/segregation testing (trio
+   sequencing or targeted Sanger confirmation of both variants in both
+   parents) be performed to establish phase before this pair — whether or
+   not a "Potential" classification was reached under step 2(b) — can be
+   reported as a confirmed compound-heterozygous diagnosis — a biallelic
+   call resting on two heterozygous variants of unconfirmed phase in a
+   singleton is incomplete without stating what would resolve it, not just
+   a caveat to note in passing. Do NOT add this recommendation line when
+   parental AB data IS present for at least one parent on at least one
+   variant (a true trio case with a genuinely ambiguous/unresolvable
+   pattern, e.g. an apparent de novo event) — that is a different situation
+   already covered by step 2's phase gate, and does not need a "please
+   sequence the parents" recommendation when they already were.
+
+Use exactly this format:
+
+# Recessive Analysis (compound heterozygous / biallelic) — [GENE] ([HGVS of Variant A] / [HGVS of Variant B])
+**Phase:** [copy the backend-determined phase verbatim from above]
+**Parental carrier status:** [what evidence IS present about parents being unaffected carriers, or "no parental phenotype data available"]
+**Recommendation:** [ONLY when step 5 applies — singleton, no parental AB data at all for either variant: "Parental/segregation testing recommended to confirm phase (cis vs. trans) before this compound heterozygous pair can be considered diagnostic." Omit this line entirely when step 5 does not apply.]
+
+DO NOT write "Base ACMG criteria" or "Base ACMG points" or "Total ACMG
+points" for either variant yourself — that block is spliced in mechanically
+by the pipeline straight from each variant's own Stage-4 conclusion, never
+re-derived or transcribed at this layer. A real observed failure this
+avoids: the same variant's "Base ACMG points" came out as three different
+numbers across its three MOI-layer blocks in one run because each layer
+was asked to copy the number "verbatim" and instead re-derived it under its
+own framing. Your job here is ONLY the recessive-specific delta (PM3) and
+the joint comment — write nothing else about base scoring.
+
+## Variant A — {variant_a_label}
+**Recessive criteria applied:** [PM3, if applicable, with justification citing Variant B's classification] [or "PM3 (hypothesis — trans phase not confirmed), if applicable under step 2(b), with justification citing Variant B's classification"] [or "None — partner does not meet Likely Pathogenic threshold"]
+**Recessive delta:** [+2 confirmed / +2 hypothesis / +0]
+
+## Variant B — {variant_b_label}
+**Recessive criteria applied:** [PM3, if applicable, with justification citing Variant A's classification] [or "PM3 (hypothesis — trans phase not confirmed), if applicable under step 2(b), with justification citing Variant A's classification"] [or "None — partner does not meet Likely Pathogenic threshold"]
+**Recessive delta:** [+2 confirmed / +2 hypothesis / +0]
+
+**Comment:** [2-3 sentences on the joint recessive mechanism — do not frame either variant as superior to the other. If either variant carries a hypothesis-only PM3, state plainly that the compound-het call is a working hypothesis pending trans-phase confirmation, not a confirmed diagnosis.]
+
+Classification thresholds (sum of applied points, same as base layer):
+- Pathogenic: ≥ 10 (or "Potential Pathogenic" if reached only via a step 2(b) hypothesis-only PM3)
+- Likely Pathogenic: 6 to 9 (or "Potential Likely Pathogenic" if reached only via a step 2(b) hypothesis-only PM3)
+- Uncertain Significance (VUS): 0 to 5
+- Likely Benign: -1 to -6
+- Benign: ≤ -7
+
+CITATIONS ARE MANDATORY: every claim traceable to a source in either variant's base conclusion or context above (including citations already present there) MUST be cited/carried forward inline using (PMID:XXXXXXXX) or a bare URL. Do not write an uncited claim when its source is available above. Do not introduce new evidence not already present above.
+
+CITATIONS FORMAT: citations appear inline only — (PMID:XXXXXXXX) or a URL placed inside the sentence it supports, right after the specific claim. Never write a separate CITATIONS, References, or Sources list or section, and never cite a PMID in a sentence about a different gene or variant than the one it supports.
