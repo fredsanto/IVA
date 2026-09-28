@@ -127,6 +127,21 @@ with `"NA"`. Common column names are auto-detected via `COLUMN_ALIASES` in
 | `ClinVar_class` | `Pathogenic` |
 | `Frequency` | `1.19E-05` |
 | `CADD_score` | `26` |
+| `Allelic_Balance` | `0.5393` |
+
+Allelic balance (variant allele fraction, 0–1) depends on the case type:
+
+| Case | Columns | Example |
+|---|---|---|
+| Single (proband only) | `Allelic_Balance` | `0.5393` |
+| Trio | `Allelic_Balance_proband` | `0.5393` |
+| | `Allelic_Balance_mother` | `0.4872` |
+| | `Allelic_Balance_father` | `0` |
+
+For trios, the proband column maps to the canonical `Allelic_balance` field and the
+parent columns to `Allelic_balance_mother` / `Allelic_balance_father`. Parental values
+drive segregation (de novo, inherited, trans/cis phase); leave a parent column empty or
+`NA` when that parent was not sequenced.
 
 ---
 
