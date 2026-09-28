@@ -11,8 +11,8 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends curl ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 
-COPY environment.yml /tmp/environment.yml
-RUN conda env create -f /tmp/environment.yml -n iva && conda clean -afy
+COPY environment.yml /opt/environment.yml
+RUN conda env create -f /opt/environment.yml -n iva && conda clean -afy
 
 ENV PATH=/opt/conda/envs/iva/bin:$PATH \
     PYTHONUNBUFFERED=1 \
