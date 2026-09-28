@@ -25,6 +25,10 @@ GPU_MEMORY_UTILIZATION="${GPU_MEMORY_UTILIZATION:-0.90}"
 VLLM_READY_TIMEOUT="${VLLM_READY_TIMEOUT:-3600}"
 
 export PYTHONUNBUFFERED=1
+# vLLM's FlashInfer top-k/top-p sampler JIT-compiles a CUDA kernel at startup
+# and needs nvcc, which the pip/conda install does not provide; use vLLM's
+# built-in PyTorch sampler instead (set to 1 if a CUDA toolkit is installed).
+export VLLM_USE_FLASHINFER_SAMPLER="${VLLM_USE_FLASHINFER_SAMPLER:-0}"
 export PIPELINE_BACKEND=direct
 export VLLM_BASE_URL="http://localhost:${VLLM_PORT}"
 mkdir -p logs
