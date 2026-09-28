@@ -8,7 +8,7 @@
 FROM condaforge/miniforge3:24.9.2-0
 
 RUN apt-get update \
- && apt-get install -y --no-install-recommends curl ca-certificates \
+ && apt-get install -y --no-install-recommends curl ca-certificates build-essential \
  && rm -rf /var/lib/apt/lists/*
 
 COPY environment.yml /opt/environment.yml

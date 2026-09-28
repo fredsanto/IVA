@@ -10,7 +10,9 @@ native install and for the Docker image.
 
 **Requirements**
 
-- Linux x86_64 with an NVIDIA GPU and a driver supporting CUDA 12. Tested on an
+- Linux x86_64 with an NVIDIA GPU and a driver supporting CUDA 12, and a C
+  compiler (`gcc`; e.g. `apt install build-essential`) — vLLM's Triton kernels
+  compile a small helper at startup. The Docker image installs it. Tested on an
   A100 40 GB; the model uses about 18 GB for its weights, and vLLM takes 90 % of
   GPU memory by default (`GPU_MEMORY_UTILIZATION`).
 - About 30 GB of disk: ~10 GB for the Python/CUDA environment, ~18 GB for the
@@ -26,7 +28,7 @@ native install and for the Docker image.
 ```bash
 git clone https://github.com/fredsanto/IVA.git
 cd IVA
-conda env create -f environment.yml        # creates the "iva" environment (~10 GB, 10-30 min)
+conda env create -f environment.yml        # creates the "iva" environment (~9 GB, ~5-15 min)
 conda activate iva
 
 export HF_HOME=/path/with/20GB/free        # optional: where the model weights are cached
@@ -50,7 +52,7 @@ No prebuilt image is published; the image is built from this repository's
 ```bash
 git clone https://github.com/fredsanto/IVA.git
 cd IVA
-docker build -t iva .                      # ~10 GB image, 10-30 min
+docker build -t iva .                      # ~8 GB image, ~5-15 min
 docker run --gpus all -p 8002:8002 \
     -v iva-models:/models \
     -v "$PWD/results:/opt/iva/results" \
@@ -89,8 +91,9 @@ on this machine, then prove it works. Steps:
 
 1. Check prerequisites and report them before installing: Linux x86_64,
    `nvidia-smi` shows an NVIDIA GPU (40 GB class recommended) and a driver
-   supporting CUDA 12, at least 30 GB free disk, internet access. If there is
-   no NVIDIA GPU, stop and tell me — IVA cannot run without one.
+   supporting CUDA 12, a C compiler (`gcc`) for the native route, at least
+   30 GB free disk, internet access. If there is no NVIDIA GPU, stop and tell
+   me — IVA cannot run without one.
 2. Clone the repository and read README.md (Installation section).
 3. Choose the install route: if `docker` and the NVIDIA Container Toolkit are
    available (`docker run --rm --gpus all ubuntu nvidia-smi` works), use
