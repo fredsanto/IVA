@@ -47,7 +47,7 @@ The server **cannot be accessed directly from outside the cluster**. All browser
 
 ## Pipeline Location
 
-The pipeline package and its conda env live **inside ServerQwen**, at `Qwen_Engine_IVA/IVA_vllm` and `Qwen_Engine_IVA/env_vllm_0606` — a self-contained copy, not a reference to the original `eric_folder/genova_vllm_556_0610` (which is a separate, independently-tracked repo). ServerQwen only ever reads/edits its own copy under `Qwen_Engine_IVA/` — the two are not kept in sync automatically; a change made in one does not appear in the other unless copied over manually.
+The pipeline package and its conda env live **inside ServerQwen**, at `Qwen_Engine_IVA/IVA_vllm` and `Qwen_Engine_IVA/env_vllm_0606` — a self-contained copy, not a reference to the first `eric_folder/genova_vllm_556_0610` (which is a separate, independently-tracked repo). ServerQwen only ever reads/edits its own copy under `Qwen_Engine_IVA/` — the two are not kept in sync automatically; a change made in one does not appear in the other unless copied over manually.
 
 All paths are self-resolving, not hardcoded to a specific user/checkout location:
 - `launch_qwen.sh` derives its own directory from `$SLURM_SUBMIT_DIR` (falls back to `$(pwd)`)
