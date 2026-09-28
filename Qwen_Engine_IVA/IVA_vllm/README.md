@@ -1,4 +1,4 @@
-# Variant Analysis Pipeline
+# Intelligent Variant Analysis Pipeline
 
 Clinical genomics pipeline that takes a list of genetic variants and a patient
 phenotype description, gathers evidence from multiple sources per variant, and
