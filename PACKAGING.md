@@ -30,8 +30,8 @@ apptainer build --fakeroot iva-gpu.sif iva-gpu.def
 
 Takes several minutes — it builds a full conda env (`vllm`, `torch`,
 `transformers`, and everything else in
-`Qwen_Engine_IVA/env_vllm_0606/env_vllm_pipeline_0606.yml`, the same
-file the current conda-based deployment uses). No GPU needed to build,
+`environment.yml` (repo root), the same
+file the native install and the Dockerfile use). No GPU needed to build,
 only to run.
 
 ### Get the code and model weights in at run time

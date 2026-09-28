@@ -6,7 +6,7 @@ From: condaforge/miniforge3:24.9.2-0
     Pipeline Qwen3.5-9B variant analysis (vLLM)
 
 %files
-    Qwen_Engine_IVA/env_vllm_0606/env_vllm_pipeline_0606.yml /opt/env_vllm_pipeline_0606.yml
+    environment.yml /opt/environment.yml
 
 %post
     set -eu
@@ -14,12 +14,12 @@ From: condaforge/miniforge3:24.9.2-0
     apt-get install -y --no-install-recommends curl ca-certificates
     rm -rf /var/lib/apt/lists/*
 
-    # Single source of truth for the pipeline's Python deps is the existing,
-    # team-maintained env_vllm_pipeline_0606.yml (same file launch_qwen.sh's
-    # `conda activate` path already uses) — built here instead of re-pinned,
+    # Single source of truth for the pipeline's Python deps is the repo-root
+    # environment.yml (also used by the native install and the Dockerfile)
+    # — built here instead of re-pinned,
     # so updating that one file is enough to rebuild an in-sync image; no
     # separate lockfile to drift out of sync with it.
-    conda env create -f /opt/env_vllm_pipeline_0606.yml -n env-vllm-pipeline
+    conda env create -f /opt/environment.yml -n env-vllm-pipeline
     conda clean -afy
 
 %environment
@@ -34,7 +34,7 @@ From: condaforge/miniforge3:24.9.2-0
     ServerQwen GPU-side runtime environment: Python 3.11 + vLLM + the CUDA
     stack vLLM's own wheels bring (nvcc/cudnn/nccl/cutlass — no host CUDA
     module needed) + the pipeline's Python dependencies, built from
-    Qwen_Engine_IVA/env_vllm_0606/env_vllm_pipeline_0606.yml.
+    environment.yml.
 
     This image is the RUNTIME ENVIRONMENT ONLY. Neither the pipeline code
     nor the model weights are baked in — both are fetched/mounted at run

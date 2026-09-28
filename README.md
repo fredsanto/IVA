@@ -1,5 +1,119 @@
 # ServerQwen — Qwen Variant Analysis Server
 
+## Installation
+
+IVA runs as two processes on one GPU machine: a **vLLM** server hosting the
+Qwen3.5-9B model, and the **IVA web server** (FastAPI), which runs the pipeline
+and serves the browser UI and HTTP API on port 8002. `start_iva.sh` starts both
+in the right order. The same `environment.yml` defines the software for the
+native install and for the Docker image.
+
+**Requirements**
+
+- Linux x86_64 with an NVIDIA GPU and a driver supporting CUDA 12. Tested on an
+  A100 40 GB; the model uses about 18 GB for its weights, and vLLM takes 90 % of
+  GPU memory by default (`GPU_MEMORY_UTILIZATION`).
+- About 30 GB of disk: ~10 GB for the Python/CUDA environment, ~18 GB for the
+  model weights (downloaded from Hugging Face on first start).
+- Internet access at run time: Hugging Face (first start only) and the public
+  evidence APIs the pipeline queries per variant (NCBI E-utilities, ClinVar,
+  LitVar2, gnomAD, ClinGen, AutoPVS1, SpliceAI).
+- Optional: a free NCBI API key (`NCBI_API_KEY`) raises the NCBI rate limit
+  from 3 to 10 requests/s.
+
+### Option A — native install (conda)
+
+```bash
+git clone https://github.com/fredsanto/IVA.git
+cd IVA
+conda env create -f environment.yml        # creates the "iva" environment (~10 GB, 10-30 min)
+conda activate iva
+
+export HF_HOME=/path/with/20GB/free        # optional: where the model weights are cached
+export NCBI_API_KEY=your_key               # optional
+./start_iva.sh                             # first start downloads the weights, then loads them (a few minutes)
+```
+
+`start_iva.sh` waits until vLLM reports the model as loaded, then starts the web
+server. When the log prints `IVA web server on http://0.0.0.0:8002`, check it:
+
+```bash
+curl http://localhost:8002/health          # {"status":"ok","backend":"direct",...,"direct_available":true}
+```
+
+### Option B — Docker (image built locally)
+
+No prebuilt image is published; the image is built from this repository's
+`Dockerfile`. Needs Docker with the
+[NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html).
+
+```bash
+git clone https://github.com/fredsanto/IVA.git
+cd IVA
+docker build -t iva .                      # ~10 GB image, 10-30 min
+docker run --gpus all -p 8002:8002 \
+    -v iva-models:/models \
+    -v "$PWD/results:/opt/iva/results" \
+    -e NCBI_API_KEY=your_key \
+    iva
+```
+
+The `iva-models` volume keeps the downloaded weights between runs; `results/`
+receives the saved reports. Check with `curl http://localhost:8002/health` as above.
+
+### Using it
+
+- **Browser:** open `http://localhost:8002`, upload a variant CSV/Excel file and
+  type the patient phenotype. On a remote machine, tunnel the port first:
+  `ssh -N -L 8002:<gpu-host>:8002 <user>@<login-host>`.
+- **HTTP API:**
+  ```bash
+  curl -F csv_file=@variants.csv -F patient_report="visual impairment" \
+       http://localhost:8002/analyze          # -> {"job_id": "...", ...}
+  curl http://localhost:8002/result/<job_id> # {"status":"running"} until {"status":"done","result":...}
+  ```
+  Input columns are described in
+  [`Qwen_Engine_IVA/IVA_vllm/README.md`](Qwen_Engine_IVA/IVA_vllm/README.md#input-format).
+- **SLURM clusters:** `launch_qwen.sh` is the batch-job version used on Curnagl
+  (environment modules, SSH tunnel info); see
+  [Running on the Cluster](#running-on-the-cluster-full-pipeline).
+
+### Option C — let a coding agent install it
+
+Paste this prompt into a general coding agent (Claude Code, Codex, Cursor, …)
+running on the target machine:
+
+```text
+Install and start IVA (Intelligent Variant Analysis) from https://github.com/fredsanto/IVA
+on this machine, then prove it works. Steps:
+
+1. Check prerequisites and report them before installing: Linux x86_64,
+   `nvidia-smi` shows an NVIDIA GPU (40 GB class recommended) and a driver
+   supporting CUDA 12, at least 30 GB free disk, internet access. If there is
+   no NVIDIA GPU, stop and tell me — IVA cannot run without one.
+2. Clone the repository and read README.md (Installation section).
+3. Choose the install route: if `docker` and the NVIDIA Container Toolkit are
+   available (`docker run --rm --gpus all ubuntu nvidia-smi` works), use
+   Option B (docker build + docker run). Otherwise use Option A (conda/mamba:
+   `conda env create -f environment.yml`, then `conda activate iva`). If
+   neither conda nor docker is installed, install Miniforge in my home
+   directory first.
+4. Set HF_HOME to a directory with at least 20 GB free if the home directory
+   is small. Do not change environment.yml, the Dockerfile or any pipeline code.
+5. Start IVA with ./start_iva.sh (native) or the docker run command (Docker),
+   in the background, and wait until the log shows
+   "IVA web server on http://0.0.0.0:8002" — the first start downloads ~18 GB
+   of model weights and can take a while.
+6. Verify: `curl http://localhost:8002/health` must return "status":"ok" and
+   "direct_available":true.
+7. Report back: the install route used, the GPU found, where the model weights
+   are cached, the command to start IVA again later, and the /health output.
+   If any step fails, show the exact error and the last 30 lines of
+   logs/vllm_server.log instead of guessing a fix.
+```
+
+---
+
 FastAPI web server exposing a genomic variant analysis pipeline powered by **Qwen3.5-9B** running under **vLLM**. Designed for a SLURM-managed HPC cluster (GPU nodes) with SSH tunnel access from a laptop.
 
 `$PROJECT_ROOT` below is the directory containing this `ServerQwen/` repo and the `.venv_qwen/` virtualenv, e.g. `export PROJECT_ROOT=/path/to/GenMasterAI`.

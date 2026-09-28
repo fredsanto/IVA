@@ -1,0 +1,10 @@
+# Only what the running server needs goes into the image.
+*
+!environment.yml
+!start_iva.sh
+!server_qwen.py
+!templates/
+!Qwen_Engine_IVA/IVA_vllm/
+Qwen_Engine_IVA/IVA_vllm/prompts/backup/
+**/__pycache__/
+**/*.bak*
