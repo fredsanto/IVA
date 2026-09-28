@@ -8,41 +8,6 @@ Git username: `fredsanto`
 
 ---
 
-## NEXT SESSION — READ FIRST
-
-An overnight full 16-trio batch run is in flight as of 2026-09-15, tag `acmgfix_full16`:
-- Log: `batch_patientmg_acmgfix_full16_nohup.out`
-- Summary (once done): `batch_patientmg_acmgfix_full16_summary.tsv`
-- Server: job on dnagpu002:8002 (check `squeue -u $USER`, node may have changed if restarted)
-
-This run verifies a same-day fix to `pipeline/core/acmg_points.py` /
-`pipeline/stages/moi_recessive.py` / `prompts/moi_recessive.txt`: the
-Recessive MOI layer's "Base ACMG points" was being independently
-re-derived (not copied) by the SLM on every layer call, producing
-different numbers for the identical variant across MOI layers (a real
-case: RYR1 in LGE_14 got 8/4/2 across De Novo/Dominant/Recessive layers
-for the same variant) — which in turn caused a genuinely causative RYR1
-compound-het pair to be missed/undercalled as VUS. Fix: `extract_base_acmg()`
-now pulls the ONE canonical base ACMG block mechanically from each
-variant's own Stage-4 conclusion and Python splices it into the Recessive
-layer's output, instead of trusting the SLM to transcribe it. Verified on
-an isolated 2-variant RYR1 test case before launching this full run — see
-`results/RYR1_test_trio_20260915_000944/report.txt` for the passing case.
-
-**Before doing anything else next session:** check whether
-`batch_patientmg_acmgfix_full16_summary.tsv` exists and has 16 `done` rows
-with 0 fails, then specifically re-check LGE_14's RYR1 call in its
-`results/LGE_14_*/report.txt` — confirm the Recessive layer now correctly
-calls it CAUSATIVE (compound heterozygous Pathogenic/Likely Pathogenic)
-instead of the VUS it was getting before this fix. Only the Recessive MOI
-layer got this deterministic-injection fix — De Novo, Dominant, and
-X-linked layers (`moi_denovo.py`, `moi_dominant.py`, `moi_xlinked.py`)
-still ask the SLM to transcribe "Base ACMG points" itself and are known to
-be susceptible to the same cross-layer-disagreement bug; extending the
-same fix to those is the logical next step if it recurs there.
-
----
-
 ## Architecture
 
 ```
