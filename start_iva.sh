@@ -3,7 +3,7 @@
 # server (direct mode — the pipeline runs inside the web server process).
 # Generic launcher (no SLURM, no environment modules); run it with the `iva`
 # conda environment active, or as the Docker image's default command.
-# For the Curnagl SLURM deployment use launch_qwen.sh instead.
+# For a SLURM cluster deployment use launch_qwen.sh instead.
 #
 # Environment variables (all optional):
 #   PORT                    IVA web UI / API port          (default 8002)

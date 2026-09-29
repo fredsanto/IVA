@@ -76,7 +76,7 @@ receives the saved reports. Check with `curl http://localhost:8002/health` as ab
   ```
   Input columns are described in
   [`Qwen_Engine_IVA/IVA_vllm/README.md`](Qwen_Engine_IVA/IVA_vllm/README.md#input-format).
-- **SLURM clusters:** `launch_qwen.sh` is the batch-job version used on Curnagl
+- **SLURM clusters:** `launch_qwen.sh` is the SLURM batch-job version
   (environment modules, SSH tunnel info); see
   [Running on the Cluster](#running-on-the-cluster-full-pipeline).
 
@@ -150,7 +150,6 @@ The server **cannot be accessed directly from outside the cluster**. All browser
 |------|---------|
 | `server_qwen.py` | Main FastAPI app — all routes, job management, SSE streaming, per-variant progress |
 | `launch_qwen.sh` | SLURM batch script — starts vLLM + ServerQwen on a GPU node. **The only supported way to launch the server** |
-| `tunnel_qwen.sh` | Run on laptop — sets up SSH tunnel to the compute node |
 | `test_server.py` | Integration test suite |
 | `requirements.txt` | Python deps: `fastapi`, `uvicorn`, `httpx`, `python-multipart` |
 | `templates/index.html` | Single-page web UI |
@@ -307,7 +306,7 @@ sbatch launch_qwen.sh
 
 `launch_qwen.sh` will:
 1. Allocate 1 GPU node (`gpu` partition, 4 CPUs, 16 GB RAM, 1 GPU, 12 h)
-2. Load `miniforge3` + `cuda` modules via `dcsrsoft use 20241118`
+2. Load the `miniforge3` + `cuda` environment modules
 3. Activate conda env at `Qwen_Engine_IVA/env_vllm_0606`
 4. **Clear stale processes** on ports `VLLM_PORT`, `PORT`, `PIPELINE_PORT` (`fuser -k`) — cleans up leftovers from a prior job that ran on the same compute node and didn't shut down cleanly
 5. Start vLLM serving `Qwen/Qwen3.5-9B` (bfloat16, 32k context, 90% GPU mem) on port **38103** in the background
@@ -345,13 +344,7 @@ tail -f server_qwen_<JOBID>.log
 ssh -N -L 8002:<COMPUTE_NODE>:8002 <user>@<cluster-login-host>
 ```
 
-`<COMPUTE_NODE>` is printed in the log and written to `.connection`. Or use the helper script (reads `.connection` automatically):
-
-```bash
-bash tunnel_qwen.sh
-# or
-bash tunnel_qwen.sh --node dnagpu003 --port 8002
-```
+`<COMPUTE_NODE>` is printed in the log and written to `.connection`.
 
 ### 4. Open browser
 
@@ -381,7 +374,7 @@ quotacheck
 ```
 ------------------------------------------user quota in G-------------------------------------------
 Path                     Quota   Used    Avail   Use% | Quota_files  No_files      Use%
-/users/fsantoni1         50.00   29.11   20.89    58% | 203424       202400        101%
+/users/<user>            50.00   29.11   20.89    58% | 203424       202400        101%
 ```
 
 Note the two separate `Use%` columns — space can be nowhere near full (58%

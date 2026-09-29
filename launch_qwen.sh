@@ -139,7 +139,7 @@ else
     export VLLM_BASE_URL="http://localhost:${VLLM_PORT}"
 fi
 
-# ── Write connection info for tunnel_qwen.sh ──────────────────────────────────
+# ── Write connection info ──────────────────────────────────────────────────────
 cat > "$SERVERQWN_DIR/.connection" <<-CONN_EOF
 SERVERQWN_NODE=$NODE
 SERVERQWN_PORT=$PORT
@@ -155,7 +155,7 @@ echo " Port         : $PORT"
 echo ""
 echo " From your laptop, run this SSH tunnel:"
 echo ""
-echo "   ssh -N -L ${PORT}:${NODE}:${PORT} fsantoni1@curnagl.dcsr.unil.ch"
+echo "   ssh -N -L ${PORT}:${NODE}:${PORT} ${USER}@<login-host>"
 echo ""
 echo " Then open http://localhost:${PORT} in your browser"
 echo "============================================================"

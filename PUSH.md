@@ -10,7 +10,7 @@ one at GitHub → Settings → Developer settings → Personal access tokens, th
 use the new one below.
 
 ```bash
-cd /work/PRTNR/CHUV/MED/fsantoni1/pitnet/AI/JING/GenMasterAI
+cd $PROJECT_ROOT
 
 # 1. Split out just the pipeline subtree (not the whole monorepo) as its own
 #    branch with linear history rewritten to that subdirectory's root.

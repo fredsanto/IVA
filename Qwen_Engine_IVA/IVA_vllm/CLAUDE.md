@@ -11,7 +11,7 @@ This is a clinical genomics pipeline that takes a list of genetic variants and a
 phenotype description, gathers evidence from multiple sources per variant, and produces
 a structured clinical report using a Small Language Model (SLM).
 
-The pipeline is designed to run on a SLURM HPC cluster (CURNAGL, A100 40GB GPU node)
+The pipeline is designed to run on a SLURM HPC cluster (A100 40GB GPU node)
 and is exposed as a FastAPI server — making it accessible interactively from a browser,
 programmatically via HTTP, or as an sbatch job. The server is the single universal
 entry point regardless of how compute resources were allocated.

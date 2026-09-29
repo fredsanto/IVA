@@ -43,7 +43,7 @@ From: condaforge/miniforge3:24.9.2-0
 
       - Pipeline code (Qwen_Engine_IVA/IVA_vllm/, prompts/)
         — bind-mount the repo at run time:
-            apptainer exec --nv --bind /work/PRTNR/...:/work/PRTNR/... \
+            apptainer exec --nv --bind /path/to/IVA:/path/to/IVA \
                 iva-gpu.sif vllm serve Qwen/Qwen3.5-9B --dtype bfloat16 ...
 
       - Model weights (Qwen/Qwen3.5-9B, ~18GB) — downloaded by vLLM from
@@ -51,10 +51,9 @@ From: condaforge/miniforge3:24.9.2-0
         library baked into this image; the weights themselves are never
         part of the build. Apptainer bind-mounts the real $HOME by default,
         so the download lands in $HOME/.cache/huggingface and is reused on
-        every subsequent run — no re-download per job. On Curnagl, point
-        HF_HOME at shared project storage instead of $HOME (quota) before
-        the first run, e.g.:
-            export HF_HOME=/work/PRTNR/.../ServerQwen/.hf_cache
+        every subsequent run — no re-download per job. If $HOME has a small
+        quota, point HF_HOME at larger storage before the first run, e.g.:
+            export HF_HOME=/path/with/20GB/free/.hf_cache
         Pre-warm the cache once via `huggingface-cli download Qwen/Qwen3.5-9B`
         (inside the container) if you want the first `vllm serve` on a GPU
         node to skip the download entirely.

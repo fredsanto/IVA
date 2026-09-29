@@ -39,15 +39,15 @@ only to run.
 - **Pipeline code** (`Qwen_Engine_IVA/IVA_vllm/`,
   `prompts/`) — bind-mount the repo; Apptainer auto-binds your `$HOME` and
   current directory by default, so running from inside the repo checkout
-  usually needs no extra flag. On Curnagl, if your checkout lives under
-  `/work/...`, add it explicitly: `--bind /work/PRTNR/...:/work/PRTNR/...`.
+  usually needs no extra flag. If your checkout lives elsewhere (e.g. shared
+  project storage), add it explicitly: `--bind /path/to/IVA:/path/to/IVA`.
 - **Model weights** (`Qwen/Qwen3.5-9B`, ~18GB) — vLLM downloads them from
   the Hugging Face Hub on first run, into `$HOME/.cache/huggingface` by
   default (reused on every later run, not re-downloaded per job). To avoid
   filling your home-directory quota, point the cache at shared project
   storage first:
   ```bash
-  export HF_HOME=/work/PRTNR/CHUV/MED/fsantoni1/pitnet/AI/JING/GenMasterAI/ServerQwen/.hf_cache
+  export HF_HOME=/path/to/shared/storage/.hf_cache
   ```
 
 ### Run vLLM (on a GPU node — `--nv` maps the host driver in)
@@ -101,9 +101,9 @@ iva-webapp
 ```
 
 Then open `http://localhost:8002` — or tunnel from a laptop to wherever
-it's running the same way `tunnel_qwen.sh` already does:
+it's running:
 ```bash
-ssh -N -L 8002:<node>:8002 <user>@curnagl.dcsr.unil.ch
+ssh -N -L 8002:<node>:8002 <user>@<login-host>
 ```
 
 ### Note on `results/`
