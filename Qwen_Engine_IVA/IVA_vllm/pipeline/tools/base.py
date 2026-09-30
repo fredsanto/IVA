@@ -13,9 +13,9 @@ All pipeline-facing tools must implement:
     gate(variant, context) -> bool     (optional — default: always run)
     run(variant, context)  -> str | None
 
-Note: ReAct sub-tools (WebSearchTool, NCBIFetchTool, WebFetchTool) also inherit
-from NetworkTool for the HTTP helpers, but they keep a different run(query: str)
-signature because they are used internally by ReActAgent, not by the pipeline executor.
+Note: NCBIFetchTool also inherits from NetworkTool for the HTTP helpers, but keeps a
+different run(query: str) signature — it is used as a helper by other tools, not by
+the pipeline executor.
 """
 
 from __future__ import annotations

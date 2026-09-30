@@ -78,9 +78,9 @@ variant-pipeline/
 │   │   ├── clinvar_gene_stats.py    ← ClinVar gene-level P/LP missense vs. nonsense/frameshift counts
 │   │   ├── clingen_allele.py        ← ClinGen Allele Registry variant resolution (CAid, cross-refs)
 │   │   ├── genereviews.py           ← GeneReviews clinical-description fetch (NCBI Bookshelf) — gene-scoped, class-cached
-│   │   ├── websearch.py             ← WebSearchTool + WebFetchTool (sub-tools for ReAct agent)
-│   │   ├── websearch_agent.py       ← WebSearchAgentTool: full ReAct web-search loop
-│   │   └── ncbi.py                  ← NCBIFetchTool (sub-tool for ReAct agent)
+│   │   ├── websearch.py             ← shared NCBI E-utilities helpers (_ncbi_get, rate limiter)
+│   │   ├── websearch_agent.py       ← WebSearchAgentTool: PubMed + bioRxiv/medRxiv (Crossref) search for genes with no curated entry
+│   │   └── ncbi.py                  ← NCBIFetchTool (ClinVar/PubMed fetch helper)
 │   │
 │   └── manifests/
 │       ├── litvar2.yaml
@@ -93,7 +93,6 @@ variant-pipeline/
 │       └── websearch_agent.yaml
 │
 └── prompts/
-    ├── retrieval.txt
     ├── compression.txt
     ├── first_triage.txt
     ├── reasoning.txt
@@ -240,7 +239,7 @@ request payload — the two are equivalent but use different APIs.
 | `Tool` | Pure deterministic logic, no network, no SLM |
 | `NetworkTool` | HTTP fetch, no SLM |
 | `SLMTool` | Calls the SLM for summarization, filtering, or judgment |
-| `ReActTool` | Full ReAct loop with tool registry (current websearch agent) |
+| `ReActTool` | Full ReAct loop with tool registry (no current implementation) |
 | `RAGTool` | Vector DB retrieval (interface ready, implementation pluggable) |
 | `BotTool` | Browser automation (interface ready, Playwright/Selenium pluggable) |
 
@@ -409,7 +408,7 @@ note the missing evidence in the report rather than reasoning from a gap.
 | `clingen_allele` | `NetworkTool` | 1 (parallel) | Python gate — a usable query can be built (transcript+cDNA, clean HGVS, or genomic SNV coordinates) |
 | `genereviews` | `NetworkTool` | 1 (parallel) | Gene present (manifest gate) |
 | `autopvs1` | `NetworkTool` | 2 (parallel) | Python gate — LoF/frameshift/splice variants only |
-| `websearch_agent` | `ReActTool` | 3 (serial) | No gate — always runs; the ReAct agent's own pre-loop checkpoint (sees prior tool outputs + full variant record, including ClinVar_class/Frequency) decides whether search is needed |
+| `websearch_agent` | `SLMTool` | 3 (serial) | No manifest gate — `run()` searches literature only when GeneReviews, OMIM phenotype, MedGen and CGD are all empty for the gene; ClinVar submission-level check for P/LP variants always |
 
 **`litvar2_summary`** runs a gene-first three-track search:
 
@@ -464,9 +463,11 @@ than as a blank result.
 
 **`genereviews`** fetches the gene's canonical GeneReviews chapter(s) directly from
 NCBI Bookshelf (`esearch` gene symbol → gene ID, `elink` gene→books, `esummary` to
-resolve chapter accessions, then a plain page fetch + `Clinical Description` /
-`Clinical Characteristics` / `Suggestive Findings` section extraction) and returns
-that curated phenotype text verbatim. Gene-scoped, class-cached like
+resolve chapter accessions, then the chapters' own PubMed records via
+`NBKxxxx[aid]` esearch + efetch) and returns each chapter's structured summary
+verbatim — the `CLINICAL CHARACTERISTICS`, `DIAGNOSIS/TESTING` and `GENETIC COUNSELING`
+(mode of inheritance) abstract sections. The Bookshelf chapter page is not fetched:
+it answers scripted requests with a CAPTCHA page. Gene-scoped, class-cached like
 `gnomad_constraint`. Exists because `litvar2_summary`'s Track 1 sorts by `pub_date`
 to surface newly-characterized gene-disease links (see its own note above) — for a
 gene with a large, unrelated publication volume (e.g. a common cancer gene that also
@@ -481,19 +482,29 @@ Syndrome chapter explicitly lists "developmental delay/intellectual disability" 
 explicit "no chapter found" message rather than `None`, consistent with the
 "errors are informative, not silent" rule.
 
-**`websearch_agent`** runs a ReAct loop with three sub-tools (WebSearchTool,
-WebFetchTool, NCBIFetchTool). No gate — always runs. Before starting the loop, a
-pre-loop checkpoint prompt receives all pre-fetched evidence from earlier tools
-(LitVar2, AutoPVS1, SpliceAI, gnomAD constraint, ClinVar gene stats, ClinGen allele,
-GeneReviews) plus the full variant record (including `ClinVar_class`/`Frequency`)
-and decides whether any primary gaps remain (OMIM, ClinVar details, functional data,
-recent case reports — GeneReviews itself is now pre-fetched, so the agent should not
-need to re-search for it) or whether the variant needs search at all — this replaced
-an earlier Python `gate()` that hard-skipped ClinVar benign/likely-benign and common
-(AF > 1%) variants before the checkpoint ever ran; that decision now lives entirely
-in the checkpoint's own judgment, which has full visibility into those same fields.
-The loop runs up to `max_steps=4` iterations; after each observation a mid-loop
-checkpoint decides whether to continue or stop.
+**`websearch_agent`** covers genes that are published as disease genes but not yet in
+any curated source. For each gene it first checks the curated sources: `OMIM_phenotype`
+(variant field), GeneReviews (chapter existence from E-utilities metadata — the
+Bookshelf chapter page itself returns a CAPTCHA to scripts), MedGen (NCBI
+gene→medgen `gene_medgen_diseases` link) and CGD (`litvar2_summary`'s CGD table). If any
+of them holds a disease entry, no literature search runs. If all are empty, it searches
+PubMed (E-utilities) for journal articles and Crossref (`member:54368`, openRxiv — the
+publisher of bioRxiv and medRxiv, `type:posted-content`) for preprints, with the gene and
+a generic disease vocabulary in title/abstract only, newest first (20 records per
+source). Crossref's query also matches non-title fields, so preprints are kept only
+when the gene symbol and a disease term appear in their own title/abstract. If Crossref
+fails, the PubMed part is kept (header says so) and the block is not cached. It
+drops preprints whose published version is already in the pool,
+scores titles with the SLM and summarises the selected abstracts (the same
+`_select_relevant_pmids` / `_summarise` steps as `litvar2_summary`'s condition inventory).
+The patient phenotype is never used, because this block also feeds Stage 1b
+gene-phenotype extraction. A clean negative is reported explicitly. Curated-source state
+and the literature block are cached per gene. Independently, for P/LP `ClinVar_class`
+variants it appends the forced ClinVar submission-level check (per-submitter tally,
+rationale, cited PMIDs). No general web search engine is used: bioRxiv's own site sits
+behind a Cloudflare bot challenge, and Brave/DuckDuckGo (via `ddgs`) were rate-limited or
+timed out on nearly every production query. Europe PMC's REST API was dropped after it
+returned 503 for every request during a test run.
 
 ---
 
@@ -557,7 +568,8 @@ Thread-safety requirements:
 - `LitVar2SummaryTool._disease_query` and `_cgd_table` are initialized with
   double-checked locking (`threading.Lock()`).
 - `WebSearchAgentTool._last_trace` uses `threading.local()` to avoid cross-thread
-  contamination.
+  contamination; its per-gene curated-source and literature caches are class-level
+  dicts written under a lock.
 
 GPU KV cache math for the A100 40 GB (Qwen3.5-9B bfloat16):
 - Model weights: ~18 GB → KV cache pool: ~18 GB (at `--gpu-memory-utilization 0.90`)
@@ -968,7 +980,6 @@ vllm            # production inference (A100 node)
 ```
 requests
 beautifulsoup4
-ddgs            # DuckDuckGo search (was duckduckgo-search)
 pandas
 openpyxl        # Excel support in normalizer
 ```

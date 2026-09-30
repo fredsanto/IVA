@@ -1,13 +1,14 @@
 """
-pipeline/tools/ncbi.py — NCBI fetch tool for the ReAct agent.
+pipeline/tools/ncbi.py — NCBI fetch helper (PubMed / PMC / ClinVar).
 
 Contains:
   - NCBIFetchTool — routes PubMed / PMC / ClinVar URLs to the right E-utilities call
 
 Shared helpers (_ncbi_get, _clean_xml_text) are imported from websearch.py.
 
-Note: NCBIFetchTool is a sub-tool consumed by WebSearchAgentTool's internal ReActAgent.
-It is NOT a pipeline-level tool. It overrides run(query: str) for ReActAgent compatibility.
+Note: NCBIFetchTool is a helper used by WebSearchAgentTool (forced ClinVar
+submission-level check). It is NOT a pipeline-level tool; run(query: str) routes a
+URL or bare PMID to the right E-utilities call.
 """
 
 import re

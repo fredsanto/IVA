@@ -16,6 +16,9 @@
 #   PORT=8002                       (ServerQwen port)
 #   VLLM_PORT=8001                  (vLLM port)
 #   PIPELINE_PORT=8000              (pipeline server port, proxy mode only)
+#   NCBI_MAX_RPS=10                 (NCBI requests/s cap; default 10 with key, else 3.
+#                                    NCBI limits per key — N servers sharing the key:
+#                                    10/N each, e.g. 4 servers → 2.5)
 
 # ── Paths (defined first — used immediately below) ─────────────────────────────
 # SLURM sets SLURM_SUBMIT_DIR to the directory `sbatch` was run from — per the

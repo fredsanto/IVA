@@ -41,9 +41,17 @@ _cache: dict[str, tuple[str, list[str]] | None] = {}
 _lock = threading.Lock()
 
 
+# Stage 1b's answer when the evidence names no condition for the gene
+# (prompts/gene_phenotype_extraction.txt) — not a condition name.
+NO_CONDITION_ANSWER = "none established"
+
+
 def split_condition_list(phenotype_list: str) -> list[str]:
     """Condition names from Stage 1b's PHENOTYPE tag ("A, B, C" or "A; B")."""
-    if not phenotype_list or phenotype_list.strip().upper() == "NA":
+    if not phenotype_list:
+        return []
+    answer = phenotype_list.strip().strip("\"'*.").strip().lower()
+    if answer == "na" or answer.startswith(NO_CONDITION_ANSWER):
         return []
     sep = ";" if ";" in phenotype_list else ","
     names = []

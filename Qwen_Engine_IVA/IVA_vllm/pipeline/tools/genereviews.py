@@ -2,8 +2,10 @@
 pipeline/tools/genereviews.py — GeneReviews clinical-description fetch.
 
 Retrieves the canonical GeneReviews chapter(s) for a gene via NCBI E-utilities
-(gene -> elink -> books) and extracts the "Clinical Description" section — the
-curated, disease-defining phenotype summary GeneReviews maintains per gene.
+(gene -> elink -> books) and returns each chapter's structured summary — clinical
+characteristics, diagnosis/testing and genetic counseling (mode of inheritance) —
+from the chapter's own PubMed record. The Bookshelf chapter page itself is not
+fetched: it answers scripted requests with a CAPTCHA page.
 
 Why this exists: LitVar2's PubMed tracks (litvar2.py) rank a broad, uncurated
 paper pool by relevance or publication date (deliberately pub_date-sorted in
@@ -26,27 +28,20 @@ level (same pattern as GnomadConstraintTool._constraint_cache).
 
 import logging
 import threading
+import xml.etree.ElementTree as ET
 
 from pipeline.tools.base import NetworkTool
 from pipeline.core.context import ToolContext
 from pipeline.core.errors import ToolFetchError, ToolParseError
-from pipeline.tools.websearch import _ncbi_get, _extract_body_text
+from pipeline.tools.websearch import _ncbi_get, _clean_xml_text
 
 logger = logging.getLogger(__name__)
 
-BOOKSHELF_URL_TMPL = "https://www.ncbi.nlm.nih.gov/books/{accession}/"
+# Labelled sections of a GeneReviews chapter's PubMed summary kept, in output
+# order (MANAGEMENT is dropped — not used for variant interpretation).
+_SUMMARY_LABELS = ("CLINICAL CHARACTERISTICS", "DIAGNOSIS/TESTING", "GENETIC COUNSELING")
 
-# Section headings GeneReviews chapters use for the phenotype-defining text,
-# tried in priority order — the first one found is where extraction starts.
-_CLINICAL_SECTION_HEADINGS = (
-    "Clinical Description",
-    "Clinical Characteristics",
-    "Suggestive Findings",
-)
-
-_SECTION_CHARS  = 3500    # window of clinical text pulled per chapter
 _MAX_CHAPTERS   = 4       # cap chapters fetched per gene (a few genes link many)
-_PAGE_MAX_CHARS = 200_000  # effectively "whole page" for _extract_body_text
 
 
 class GeneReviewsTool(NetworkTool):
@@ -151,24 +146,45 @@ class GeneReviewsTool(NetworkTool):
             })
         return chapters[:_MAX_CHAPTERS]
 
-    # ── page fetch + section extraction ─────────────────────────────────
+    # ── chapter summaries from PubMed ───────────────────────────────────
 
-    def _fetch_clinical_section(self, accession: str) -> str | None:
-        url = BOOKSHELF_URL_TMPL.format(accession=accession)
+    def _fetch_summaries(self, gene: str, accessions: list[str]) -> dict[str, str]:
+        """{accession: summary text} from each chapter's PubMed record
+        (PubmedBookArticle, abstract sections labelled per _SUMMARY_LABELS)."""
+        term = " OR ".join(f"{acc}[aid]" for acc in accessions)
         try:
-            resp = self._get(
-                url,
-                headers={"User-Agent": "Mozilla/5.0 (compatible; ResearchAgent/1.0)"},
-            )
+            pmids = _ncbi_get(
+                "esearch.fcgi",
+                {"db": "pubmed", "term": term, "retmode": "json", "retmax": len(accessions)},
+                self.timeout,
+            ).json()["esearchresult"]["idlist"]
         except Exception as e:
-            raise ToolFetchError(f"Bookshelf fetch failed for {accession}: {e}") from e
+            raise ToolFetchError(f"PubMed esearch for GeneReviews chapters failed for {gene}: {e}") from e
+        if not pmids:
+            return {}
+        try:
+            root = ET.fromstring(_ncbi_get(
+                "efetch.fcgi",
+                {"db": "pubmed", "id": ",".join(pmids), "retmode": "xml"},
+                self.timeout,
+            ).text)
+        except ET.ParseError as e:
+            raise ToolParseError(f"GeneReviews PubMed XML unparseable for {gene}: {e}") from e
+        except Exception as e:
+            raise ToolFetchError(f"PubMed efetch for GeneReviews chapters failed for {gene}: {e}") from e
 
-        text = _extract_body_text(resp.text, max_chars=_PAGE_MAX_CHARS)
-        for heading in _CLINICAL_SECTION_HEADINGS:
-            idx = text.find(heading)
-            if idx != -1:
-                return text[idx: idx + _SECTION_CHARS]
-        return None   # heading not found — page likely malformed or not a chapter
+        summaries = {}
+        for article in root.iter("PubmedBookArticle"):
+            accession = next((i.text for i in article.iter("ArticleId")
+                              if i.get("IdType") == "bookaccession"), None)
+            sections = {
+                t.get("Label"): _clean_xml_text(ET.tostring(t, encoding="unicode"))
+                for t in article.iter("AbstractText")
+            }
+            kept = [f"{label}: {sections[label]}" for label in _SUMMARY_LABELS if sections.get(label)]
+            if accession and kept:
+                summaries[accession] = "\n".join(kept)
+        return summaries
 
     # ── gene-level resolution, cached ───────────────────────────────────
 
@@ -191,20 +207,12 @@ class GeneReviewsTool(NetworkTool):
         if not chapters:
             return None
 
-        blocks = []
-        for ch in chapters:
-            try:
-                section = self._fetch_clinical_section(ch["accession"])
-            except ToolFetchError as e:
-                logger.warning("GeneReviews chapter fetch failed for %s (%s): %s",
-                                gene, ch["accession"], e)
-                continue
-            if not section:
-                continue
-            blocks.append(
-                f"--- {ch['title']} (GeneReviews {ch['accession']}, updated {ch['pubdate']}) ---\n"
-                f"{section}"
-            )
+        summaries = self._fetch_summaries(gene, [ch["accession"] for ch in chapters])
+        blocks = [
+            f"--- {ch['title']} (GeneReviews {ch['accession']}, updated {ch['pubdate']}) ---\n"
+            f"{summaries[ch['accession']]}"
+            for ch in chapters if ch["accession"] in summaries
+        ]
         return "\n\n".join(blocks) if blocks else None
 
     def run(self, variant: dict, context: ToolContext) -> str | None:

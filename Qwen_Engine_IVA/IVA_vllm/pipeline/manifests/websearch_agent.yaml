@@ -1,12 +1,13 @@
 name: websearch_agent
-description: "ReAct agent that searches the web and NCBI for variant-phenotype evidence."
+description: "PubMed + bioRxiv/medRxiv (via Crossref) literature search for genes absent from GeneReviews, OMIM, MedGen and CGD; forced ClinVar submission-level check for P/LP variants."
 enabled: true
 
 order: 3
 parallel: false
 
-# No gate — always runs. The agent uses pre-fetched evidence (LitVar2 / AutoPVS1)
-# from context.all_outputs to decide whether web search is even needed.
+# No manifest gate — run() itself decides: literature search only when every
+# curated source is empty for the gene. Order 3 so genereviews (order 1) has
+# already filled its class-level cache.
 
 compress:
   enabled: true
@@ -14,7 +15,7 @@ compress:
   strategy: slm
   max_tokens: 600
 
-# ReAct loop can be slow; allow more time
+# Up to ~6 NCBI/Crossref calls + ~5 SLM calls on a gene's first variant
 timeout: 120
 retry:
   attempts: 1
