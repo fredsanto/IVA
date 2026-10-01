@@ -38,6 +38,16 @@ CSV / Excel  ──►  normalize_upload()
                        │  kept variants only
                        ▼
         ┌─────────────────────────────────────────┐
+        │  Stage 1b — Gene condition list          │
+        │    (evidence only, no patient text)      │
+        │  Stage 1c — Phenotype overlap            │
+        │    (patient vs. conditions + MedGen/HPO) │
+        │  Stage 1d — Mode of inheritance          │
+        │    (for the matched conditions)          │
+        └──────────────┬──────────────────────────┘
+                       │  stated facts for reasoning
+                       ▼
+        ┌─────────────────────────────────────────┐
         │  Stage 2 — Reasoning + Second Triage     │
         │  32 variants in parallel                 │
         │  per kept variant:                       │
@@ -63,6 +73,70 @@ CSV / Excel  ──►  normalize_upload()
               Stage 5 — Final Conclusion
               one SLM call across all included blocks
 ```
+
+---
+
+## Phenotype and mode-of-inheritance strategy
+
+Phenotype fit and mode of inheritance (MOI) are decided before reasoning, each in
+its own short SLM call, and are handed to the reasoning and scoring prompts as
+backend-determined facts. The model does not re-derive them from the evidence.
+
+### Stage 1b — gene condition list (`reasoning.run_gene_phenotype_extraction`)
+
+One call per kept variant compiles the gene's known conditions from the retrieved
+evidence only (GeneReviews, OMIM, CGD, literature, ClinVar). The patient's phenotype
+is stripped from the input and never mentioned in the prompt, so it cannot leak
+into the list or narrow it down. A patient-independent literature search
+(`litvar2.run_condition_inventory`) is added to the evidence, so the list also
+covers conditions that have nothing to do with the patient.
+
+### Stage 1c — phenotype overlap (`reasoning.run_phenotype_overlap`)
+
+The patient's phenotype is compared with the Stage 1b list only. Each condition is
+annotated with its clinical features from NCBI MedGen/HPO
+(`tools/medgen_features.condition_features`), so an eponymous syndrome is judged
+by what it involves, not by its name. No literature is shown, so papers about one
+of the gene's other conditions cannot outweigh a matching condition.
+
+Output: one `MATCH` / `NO MATCH` line per condition and a verdict:
+
+| Verdict | Meaning | Use |
+|---|---|---|
+| `YES` | the conditions cover the patient's phenotype | phenotype fit, PVS1, PP4 |
+| `PARTIAL` | at least one phenotype cluster is explained, others not addressed | same as YES, except PP4 (needs YES) |
+| `INCIDENTAL` | no listed condition matches | no gene-phenotype link |
+
+### Stage 1d — mode of inheritance (`core/moi.build_gene_mode_cache`)
+
+One decision per gene, made **for the conditions Stage 1c marked `MATCH`**. When
+none matched, all of the gene's conditions are used. A gene can cause a dominant
+disorder and a recessive one; the mode that counts is the one for the condition
+the patient has.
+
+Sources, all consulted and combined:
+
+1. **MedGen**: the inheritance of the MedGen disease concepts linked to the gene's
+   NCBI Gene record (`gene_medgen_diseases`, curated links, not a name search),
+   restricted to the matched conditions.
+2. **CSV fields**: `Inheritance` / `OMIM_inheritance`.
+3. **Literature and GeneReviews**: always read by the SLM
+   (`prompts/moi_condition_classification.txt`), even when 1–2 already give a
+   mode. Each mode (dominant, recessive, X-linked recessive, X-linked dominant,
+   X-linked unspecified) is answered separately as YES or NO. A YES must quote
+   the evidence word for word, and the code keeps it only when the quote is
+   found in the evidence. pLI/LOEUF is never accepted as an inheritance statement.
+4. **CGD**: gene-level inheritance, used only when sources 1–3 give nothing.
+
+`combine_modes` takes the union: AD from one source and AR from another gives
+`AD_AR`; XLD + XLR gives `XLD_XLR`. An X-linked mode is dropped for a gene whose
+chromosome is known and is not X. The gene evidence table in the report lists
+each source's contribution and the accepted quotes, so the call can be audited.
+
+The mode is used by Stage 2 (stated as a fact in the reasoning prompt), by the
+compound-heterozygous gene grouping (`build_recessive_gene_groups`), and by the
+MOI-specific scoring layers after Stage 4 (de novo, dominant-inherited,
+recessive, X-linked).
 
 ---
 
