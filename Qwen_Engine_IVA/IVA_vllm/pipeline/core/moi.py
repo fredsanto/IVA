@@ -11,8 +11,10 @@ Public API:
     classify_inheritance_mode(text, allow_x_linked=True) -> str
     gene_chromosome(variants, idxs) -> str
     zygosity_is_confirmed_hom(zyg) -> bool
-    build_gene_mode_cache(variants, kept_indices, context_slices, group_by_gene, llm) ->
-        (dict[str, str], dict[str, str])
+    build_gene_mode_cache(variants, kept_indices, evidence_by_index, condition_tags,
+        overlap_texts, group_by_gene, llm) -> (dict[str, str], dict[str, str])
+    matched_conditions(condition_tag, overlap_text) -> list[str]
+    combine_modes(labels, gene_chrom) -> str
     build_recessive_gene_groups(variants, gene_mode_cache, kept_indices, group_by_gene) -> dict[str, list[int]]
     MODE_LABELS: dict[str, str]
 """
@@ -31,19 +33,25 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 MAX_WORKERS_MODE_CLASSIFICATION = 16
-MAX_NEW_TOKENS_MODE_CLASSIFICATION = 350
+MAX_NEW_TOKENS_MODE_CLASSIFICATION = 500
 
-_MODE_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "moi_mode_classification.txt"
+_MODE_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "moi_condition_classification.txt"
 
-_MODE_TOKEN_RE = re.compile(
-    r"Mode:\s*(AD_AR|XLD_XLR|AD|AR|XLR|XLD|XL|UNKNOWN)", re.IGNORECASE
-)
+# The literature reading answers each mode on its own line ("Dominant: YES
+# "<quote>" | NO"); these are the line labels and the mode each one reports.
+_MODE_LINE_LABELS = {
+    "dominant": "AD",
+    "recessive": "AR",
+    "x-linked recessive": "XLR",
+    "x-linked dominant": "XLD",
+    "x-linked unspecified": "XL",
+}
 
 
 def _load_mode_prompt() -> str:
     if _MODE_PROMPT_PATH.exists():
         return _MODE_PROMPT_PATH.read_text(encoding="utf-8")
-    raise FileNotFoundError(f"moi_mode_classification prompt not found at {_MODE_PROMPT_PATH}.")
+    raise FileNotFoundError(f"moi_condition_classification prompt not found at {_MODE_PROMPT_PATH}.")
 
 # ── inheritance-mode regexes ─────────────────────────────────────────────────
 _XLR_RE       = re.compile(r"x-?linked\s*recessive|\bXLR\b", re.IGNORECASE)
@@ -82,7 +90,7 @@ MODE_LABELS = {
     "XLD":     "X-linked dominant (XLD)",
     "XLD_XLR": "X-linked (both dominant and recessive reported for this gene)",
     "XL":      "X-linked (recessive/dominant not specified in available evidence)",
-    "":        "Unknown — no inheritance signal in CSV field, CGD table, or retrieved evidence",
+    "":        "Unknown — no inheritance stated by MedGen, the CSV field, the literature/GeneReviews evidence, or CGD",
 }
 
 
@@ -160,59 +168,148 @@ def classify_inheritance_mode(text: str, allow_x_linked: bool = True) -> str:
     return ""
 
 
+def _tokens(text: str) -> str:
+    return " ".join(re.findall(r"[a-z0-9]+", text.lower()))
+
+
+def _quote_in_evidence(quote: str, evidence_tokens: str) -> bool:
+    """True when the quote occurs in the evidence, word for word (case,
+    punctuation and spacing ignored; an ellipsis may join two quoted parts,
+    each of which must occur and be at least 3 words long)."""
+    parts = [_tokens(p) for p in re.split(r"\.\.\.|…", quote)]
+    parts = [p for p in parts if p]
+    return bool(parts) and all(len(p.split()) >= 3 and p in evidence_tokens for p in parts)
+
+
+def _parse_mode_lines(
+    result: str, evidence: str, allow_x_linked: bool,
+) -> tuple[list[str], list[tuple[str, str]], list[tuple[str, str]]]:
+    """(modes answered YES with a quote found in the evidence,
+    [(line label, quote)] accepted, [(line label, quote)] discarded because the
+    quote is not in the evidence)."""
+    evidence_tokens = _tokens(evidence)
+    modes: list[str] = []
+    accepted: list[tuple[str, str]] = []
+    discarded: list[tuple[str, str]] = []
+    for line in result.splitlines():
+        text = line.strip().lstrip("-*• ").replace("**", "")
+        label, sep, answer = text.partition(":")
+        mode = _MODE_LINE_LABELS.get(label.strip().lower())
+        if not sep or not mode or not answer.strip().upper().startswith("YES"):
+            continue
+        quote = answer.strip()[3:].strip().strip("\"“”'")
+        if mode in ("XLR", "XLD", "XL") and not allow_x_linked:
+            continue
+        if _quote_in_evidence(quote, evidence_tokens):
+            modes.append(mode)
+            accepted.append((label.strip(), quote))
+        else:
+            discarded.append((label.strip(), quote))
+    return modes, accepted, discarded
+
+
 def _llm_classify_mode(
     gene: str,
+    conditions: list[str],
     evidence_text: str,
     llm: "LLMClient",
     allow_x_linked: bool,
-) -> tuple[str, str]:
-    """LLM-reasoned replacement for the old regex-based tier-3 fallback.
+) -> tuple[list[str], str, list[tuple[str, str]], list[tuple[str, str]]]:
+    """Modes of inheritance with which the gene causes *conditions*, as stated in
+    the retrieved evidence (GeneReviews summaries, literature, gnomAD constraint).
+    The LLM answers each mode separately with a verbatim quote
+    (prompts/moi_condition_classification.txt); a mode counts only when its quote
+    occurs in the evidence. The modes are combined by the caller (combine_modes).
 
-    Reads the gene's pooled free-text evidence (literature, websearch,
-    gnomAD constraint block) and reasons explicitly about AD/AR/X-linked
-    mode, including whether a dominant-negative mechanism is described —
-    which is genuinely AD regardless of gnomAD pLI/LOEUF LoF-tolerance,
-    unlike haploinsufficiency-based AD. See prompts/moi_mode_classification.txt
-    for the full reasoning rules (negation-safe, mechanism-aware).
-
-    Returns (mode, reasoning_text). mode == "" means UNKNOWN/unresolved —
-    same convention as classify_inheritance_mode(). allow_x_linked=False
-    strips any X-linked mode the LLM returns, mirroring the hard chrX gate
-    applied elsewhere in this module.
-    """
-    template = _load_mode_prompt()
-    user_prompt = template.replace("{gene}", gene).replace("{evidence_text}", evidence_text)
-
+    Returns (modes, reasoning_text, accepted, discarded) — modes [] means none
+    stated; accepted/discarded are [(mode line label, quote)] for YES answers
+    whose quote was / was not found in the evidence.
+    allow_x_linked=False ignores X-linked answers (the gene's chromosome is
+    known and is not X)."""
+    conditions_block = (
+        "\n".join(f"- {c}" for c in conditions) if conditions
+        else "- (no condition named in the evidence — classify the gene's inheritance as stated)"
+    )
+    user_prompt = (_load_mode_prompt()
+                   .replace("{gene}", gene)
+                   .replace("{conditions_block}", conditions_block)
+                   .replace("{evidence_text}", evidence_text))
     try:
         result = llm.generate(
             system=(
-                "You are an expert clinical geneticist determining a gene's mode of "
-                "inheritance from literature evidence. Limit your response to 150 words maximum."
+                "You are an expert clinical geneticist determining the mode of inheritance "
+                "of a gene's conditions from the evidence. Limit your response to 200 words maximum."
             ),
             user=user_prompt,
             max_tokens=MAX_NEW_TOKENS_MODE_CLASSIFICATION,
         )
     except Exception as exc:
         logger.warning("[MOI] LLM mode classification failed for %s: %s", gene, exc)
-        return "", ""
+        return [], "", [], []
 
-    m = _MODE_TOKEN_RE.search(result)
-    if not m:
-        logger.warning("[MOI] LLM mode classification unparseable for %s: %r", gene, result)
-        return "", result.strip()
+    modes, accepted, discarded = _parse_mode_lines(result, evidence_text, allow_x_linked)
+    for label, quote in discarded:
+        logger.info("[MOI] Gene %s: %s YES discarded — quote not in evidence: %r", gene, label, quote)
+    reasoning = result.split("\nDominant:")[0].replace("Reasoning:", "", 1).strip()
+    return modes, reasoning, accepted, discarded
 
-    mode = m.group(1).upper()
-    if mode == "UNKNOWN":
-        mode = ""
-    if not allow_x_linked and mode in ("XLR", "XLD", "XLD_XLR", "XL"):
-        logger.debug(
-            "[MOI] Gene %s: LLM returned X-linked mode %s but chrX is excluded — discarding",
-            gene, mode,
-        )
-        mode = ""
 
-    reasoning = result.split("Mode:")[0].replace("Reasoning:", "", 1).strip()
-    return mode, reasoning
+def _norm_name(name: str) -> str:
+    return " ".join(re.findall(r"[a-z0-9]+", name.lower()))
+
+
+def matched_conditions(condition_tag: str, overlap_text: str) -> list[str]:
+    """Conditions of Stage 1b's list that Stage 1c marked MATCH for this patient.
+    Stage 1c writes one line per listed condition ("- <condition>: MATCH | NO
+    MATCH — ..."); each line is recognised by its known condition name, then the
+    verdict word that follows it."""
+    from pipeline.tools.medgen_features import split_condition_list
+    names = split_condition_list(condition_tag)
+    matched = []
+    for line in (overlap_text or "").splitlines():
+        text = line.strip().lstrip("-*• ").strip()
+        for name in names:
+            if not text.lower().startswith(name.lower()):
+                continue
+            rest = text[len(name):].lstrip(" *")
+            if rest.startswith("("):
+                # the MedGen title echoed from the prompt: "<name> (MedGen: ...): MATCH"
+                depth = 0
+                for k, ch in enumerate(rest):
+                    depth += (ch == "(") - (ch == ")")
+                    if depth == 0:
+                        rest = rest[k + 1:]
+                        break
+            if rest.lstrip(" *:").upper().startswith("MATCH") and name not in matched:
+                matched.append(name)
+    return matched
+
+
+def _atoms(label: str) -> set[str]:
+    return {"AD_AR": {"AD", "AR"}, "XLD_XLR": {"XLD", "XLR"}}.get(label, {label} if label else set())
+
+
+def combine_modes(labels: list[str], gene_chrom: str) -> str:
+    """Union of the modes reported by every source, as one label: AD + AR →
+    AD_AR (dual inheritance, per protocol), XLD + XLR → XLD_XLR, and an
+    unspecified XL is absorbed by a specific XLD/XLR. Autosomal and X-linked
+    labels are exclusive — the gene's chromosome picks between them (autosomal
+    unless the gene is on chrX)."""
+    atoms: set[str] = set()
+    for label in labels:
+        atoms |= _atoms(label)
+    auto = atoms & {"AD", "AR"}
+    xl = atoms & {"XLD", "XLR", "XL"}
+    use_x = bool(xl) and (gene_chrom == "X" or not auto)
+    if use_x:
+        if {"XLD", "XLR"} <= xl:
+            return "XLD_XLR"
+        for mode in ("XLR", "XLD", "XL"):
+            if mode in xl:
+                return mode
+    if auto == {"AD", "AR"}:
+        return "AD_AR"
+    return next(iter(auto), "")
 
 
 def zygosity_is_confirmed_hom(zyg) -> bool:
@@ -237,94 +334,122 @@ def zygosity_is_confirmed_hom(zyg) -> bool:
 def build_gene_mode_cache(
     variants: list[dict],
     kept_indices: list[int],
-    context_slices: list[str],
+    evidence_by_index: dict[int, str],
+    condition_tags: dict[int, str],
+    overlap_texts: dict[int, str],
     group_by_gene: Callable[[list[dict]], dict[str, list[int]]],
     llm: "LLMClient",
 ) -> tuple[dict[str, str], dict[str, str]]:
-    """Compute inheritance mode per gene, over genes with >=1 kept variant,
-    via a 3-tier fallback: (1) CSV Inheritance/OMIM_inheritance text, (2)
-    NHGRI CGD inheritance lookup, (3) an LLM call reasoning over the
-    retrieved literature/websearch evidence text (replaces the old naive
-    regex substring match — see _llm_classify_mode's docstring for why:
-    negation-blind keyword matching was misclassifying genes on incidental
-    "dominant"/"recessive" mentions, and had no way to reconcile a
-    dominant-negative mechanism against a LoF-tolerant gnomAD pLI/LOEUF).
-    Chromosome-based X-linked gating (gene_chromosome) is applied at every
-    tier. "" means still unknown after all three tiers.
+    """Mode of inheritance per gene (genes with >=1 kept variant), decided after
+    the phenotype steps for the conditions that match the patient.
 
-    Returns (gene_mode_cache, gene_mode_reasoning_cache) — the second dict
-    holds the LLM's reasoning text for genes resolved at tier 3 only ("" for
-    genes resolved at tier 1/2, which are unambiguous structured facts that
-    don't need justification)."""
+    Target conditions: the gene's Stage 1b conditions that Stage 1c marked
+    MATCH; when none matched, all of the gene's conditions. Sources, all
+    consulted and combined (combine_modes — AD from one source and AR from
+    another gives AD_AR):
+      1. MedGen — inheritance of the MedGen disease concepts linked to the
+         gene's NCBI Gene record whose title is a target condition (all linked
+         concepts when no condition matched);
+      2. the CSV Inheritance / OMIM_inheritance fields;
+      3. the literature and GeneReviews evidence, read by the LLM for the target
+         conditions — always run, even when 1-2 already give a mode.
+    CGD's gene-level inheritance is used only when all three give nothing.
+    An X-linked mode is excluded for a gene whose chromosome is known and not X.
+
+    Returns (gene_mode_cache, gene_mode_reasoning_cache); mode "" = unknown.
+    The reasoning text lists each source's contribution."""
     from pipeline.tools.litvar2 import LitVar2SummaryTool
+    from pipeline.tools.medgen_features import gene_disease_inheritance, split_condition_list
 
     kept_set = set(kept_indices)
-    gene_mode_cache: dict[str, str] = {}
-    gene_mode_reasoning_cache: dict[str, str] = {}
-    allow_x_linked_cache: dict[str, bool] = {}
-    tier3_targets: list[tuple[str, list[int], bool]] = []
-
-    # ── Pass 1: tiers 1/2 (cheap, structured-field regex) ────────────────────
+    targets: list[tuple] = []
     for gene, idxs in group_by_gene(variants).items():
         kept_in_gene = [i for i in idxs if i in kept_set]
         if not kept_in_gene or gene == "NA":
             continue
-
-        # Hard biological constraint: a gene not located on chrX cannot be
-        # X-linked, no matter what any text tier below claims. Only disable
-        # X-linked classification when the chromosome is positively known
-        # and is NOT X — an unparseable/missing chromosome stays permissive
-        # since absence of proof isn't proof of absence.
         gene_chrom = gene_chromosome(variants, kept_in_gene)
         allow_x_linked = not (gene_chrom and gene_chrom != "X")
-        allow_x_linked_cache[gene] = allow_x_linked
-        if gene_chrom and not allow_x_linked:
-            logger.debug(
-                "[MOI] Gene %s is on chr%s — X-linked classification disabled",
-                gene, gene_chrom,
+        all_names: list[str] = []
+        matched: list[str] = []
+        for i in kept_in_gene:
+            for name in split_condition_list(condition_tags.get(i, "")):
+                if name not in all_names:
+                    all_names.append(name)
+            for name in matched_conditions(condition_tags.get(i, ""), overlap_texts.get(i, "")):
+                if name not in matched:
+                    matched.append(name)
+        targets.append((gene, kept_in_gene, gene_chrom, allow_x_linked, all_names, matched))
+
+    def _resolve_one(item: tuple) -> tuple[str, str, str]:
+        gene, kept_in_gene, gene_chrom, allow_x_linked, all_names, matched = item
+        conditions = matched or all_names
+        labels: list[str] = []
+        notes: list[str] = []
+
+        medgen = gene_disease_inheritance(gene)
+        if medgen is None:
+            notes.append("MedGen: lookup failed")
+        else:
+            wanted = {_norm_name(n) for n in matched}
+            used = [(t, m) for t, m in medgen if not wanted or _norm_name(t) in wanted]
+            medgen_labels = [classify_inheritance_mode(mode_name, allow_x_linked)
+                             for _, modes in used for mode_name in modes]
+            medgen_labels = [lab for lab in medgen_labels if lab]
+            labels += medgen_labels
+            notes.append(
+                f"MedGen: {combine_modes(medgen_labels, gene_chrom) or 'none'}"
+                + (f" ({'; '.join(t for t, m in used if m)})" if any(m for _, m in used) else "")
             )
 
-        inheritance_texts = " ".join(
-            str(variants[i].get("Inheritance", "")) + " " + str(variants[i].get("OMIM_inheritance", ""))
+        csv_text = " ".join(
+            f"{variants[i].get('Inheritance', '')} {variants[i].get('OMIM_inheritance', '')}"
             for i in kept_in_gene
         )
-        mode = classify_inheritance_mode(inheritance_texts, allow_x_linked)
+        csv_label = classify_inheritance_mode(csv_text, allow_x_linked)
+        if csv_label:
+            labels.append(csv_label)
+        notes.append(f"CSV field: {csv_label or 'none'}")
+
+        evidence = " ".join(evidence_by_index.get(i, "") for i in kept_in_gene)
+        llm_modes, llm_reasoning, accepted, discarded = _llm_classify_mode(
+            gene, conditions, evidence, llm, allow_x_linked)
+        labels += llm_modes
+        notes.append(
+            f"Literature/GeneReviews: {combine_modes(llm_modes, gene_chrom) or 'UNKNOWN'}"
+            + "".join(f' [{label}: "{quote}"]' for label, quote in accepted)
+            + "".join(f' [{label} YES discarded — quote not in evidence: "{quote}"]'
+                      for label, quote in discarded)
+        )
+
+        mode = combine_modes(labels, gene_chrom)
         if not mode:
-            # CSV had no usable inheritance field — fall back to the NHGRI CGD
-            # inheritance lookup (same table already used for known-disease
-            # literature search) rather than skipping the safeguard entirely.
             try:
-                cgd_inheritance = LitVar2SummaryTool.get_cgd_inheritance(gene)
+                cgd_label = classify_inheritance_mode(
+                    LitVar2SummaryTool.get_cgd_inheritance(gene), allow_x_linked)
             except Exception as exc:
                 logger.warning("[MOI] CGD inheritance lookup failed for %s: %s", gene, exc)
-                cgd_inheritance = ""
-            mode = classify_inheritance_mode(cgd_inheritance, allow_x_linked)
-        if mode:
-            gene_mode_cache[gene] = mode
-            gene_mode_reasoning_cache[gene] = ""
-        else:
-            # CGD table lags newly characterized gene-disease links — defer to
-            # tier 3 (LLM reasoning over retrieved literature/web-search
-            # evidence), run concurrently below rather than serially here.
-            tier3_targets.append((gene, kept_in_gene, allow_x_linked))
+                cgd_label = ""
+            mode = cgd_label
+            notes.append(f"CGD (fallback): {cgd_label or 'none'}")
 
-    # ── Pass 2: tier 3 (LLM reasoning), concurrent across unresolved genes ───
-    if tier3_targets:
-        def _resolve_one(item: tuple[str, list[int], bool]) -> tuple[str, str, str]:
-            gene, kept_in_gene, allow_x_linked = item
-            evidence_text = " ".join(context_slices[i] for i in kept_in_gene)
-            mode, reasoning = _llm_classify_mode(gene, evidence_text, llm, allow_x_linked)
-            return gene, mode, reasoning
+        scope = (f"conditions matching the patient: {', '.join(matched)}" if matched
+                 else "no condition matched the patient — all of the gene's conditions")
+        reasoning = f"Sources ({scope}) — " + "; ".join(notes) + "."
+        if llm_reasoning:
+            reasoning += f" Literature reading: {llm_reasoning}"
+        return gene, mode, reasoning
 
-        workers = min(MAX_WORKERS_MODE_CLASSIFICATION, len(tier3_targets))
+    gene_mode_cache: dict[str, str] = {}
+    gene_mode_reasoning_cache: dict[str, str] = {}
+    if targets:
+        workers = min(MAX_WORKERS_MODE_CLASSIFICATION, len(targets))
         with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
-            futures = {pool.submit(_resolve_one, item): item[0] for item in tier3_targets}
-            for future in as_completed(futures):
+            for future in as_completed([pool.submit(_resolve_one, t) for t in targets]):
                 gene, mode, reasoning = future.result()
-                gene_mode_cache[gene] = mode  # "" means still unknown after all three tiers
+                gene_mode_cache[gene] = mode
                 gene_mode_reasoning_cache[gene] = reasoning
-                logger.info("[MOI] Gene %s: LLM-resolved mode=%r", gene, mode or "UNKNOWN")
-
+                logger.info("[MOI] Gene %s: mode=%r — %s", gene, mode or "UNKNOWN",
+                            reasoning.split(" Literature reading:")[0])
     return gene_mode_cache, gene_mode_reasoning_cache
 
 

@@ -57,6 +57,7 @@ class VLLMClient(LLMClient):
         max_tokens: int = 512,
         temperature: float = 0.0,
         enable_thinking: bool = False,  # silently ignored — always False
+        repetition_penalty: float = 1.0,
     ) -> str:
         messages = [
             {"role": "system", "content": system},
@@ -69,6 +70,8 @@ class VLLMClient(LLMClient):
             "temperature": temperature,
             "chat_template_kwargs": {"enable_thinking": False},
         }
+        if repetition_penalty != 1.0:
+            payload["repetition_penalty"] = repetition_penalty
         _retries = 2
         _backoff  = 15.0
         for attempt in range(_retries + 1):

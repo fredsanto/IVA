@@ -19,6 +19,7 @@ class LLMClient(ABC):
         max_tokens: int = 512,
         temperature: float = 0.0,
         enable_thinking: bool = False,  # always False in this pipeline — enforced at registry level
+        repetition_penalty: float = 1.0,
     ) -> str:
         """
         Generate a response for a single system+user turn.
@@ -30,6 +31,8 @@ class LLMClient(ABC):
             temperature:     Sampling temperature (0.0 = greedy).
             enable_thinking: Always forced to False; parameter retained for interface
                              compatibility only.
+            repetition_penalty: >1.0 penalises repeated tokens (1.0 = off); used to
+                             retry a response that degenerated into a repetition loop.
 
         Returns:
             The model's response as a plain string.

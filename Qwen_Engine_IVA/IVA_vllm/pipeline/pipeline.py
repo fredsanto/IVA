@@ -233,8 +233,8 @@ def _build_gene_evidence_table(
     """
     One block per gene in the variant set: ClinVar P/LP missense:nonsense/FS
     ratio (the same counts that gate BP1/PP2), gnomAD pLI/LOEUF, this gene's
-    inheritance-mode determination (with reasoning, if the mode was resolved
-    by the LLM tier — see moi.build_gene_mode_cache), and this gene's
+    inheritance-mode determination (with each source's contribution — see
+    moi.build_gene_mode_cache), and this gene's
     representative variant's own gnomAD allele frequency + homozygote/
     heterozygote carrier counts (never present in the input CSV, regardless
     of whether a plain AF was already supplied there).
@@ -293,10 +293,9 @@ def _build_gene_evidence_table(
         reasoning = gene_mode_reasoning_cache.get(gene, "")
         mode_label = moi.MODE_LABELS.get(mode, moi.MODE_LABELS[""])
         if reasoning:
-            # Only resolved via the LLM tier (tiers 1/2 are unambiguous
-            # structured facts and carry no reasoning text) — surface the
-            # justification so the mode call is auditable, not a silent label.
-            lines.append(f"  Inheritance mode (literature-reasoned): {mode_label} — {reasoning}")
+            # Each source's contribution (MedGen, CSV, literature/GeneReviews,
+            # CGD fallback) — the mode call is auditable, not a silent label.
+            lines.append(f"  Inheritance mode: {mode_label} — {reasoning}")
         elif mode:
             lines.append(f"  Inheritance mode (CSV/CGD): {mode_label}")
 
@@ -733,15 +732,9 @@ class Pipeline:
         # Scoped to recessive-relevant inheritance only — a second variant in a
         # purely dominant gene doesn't change the first variant's standing.
         # Inheritance-mode classification and compound-het gene grouping live in
-        # pipeline/core/moi.py (relocated so the MOI-layer stage modules can
-        # import this logic directly) — same behavior, just no longer inline here.
+        # pipeline/core/moi.py. Both run after Stage 1c (below): the mode is
+        # decided for the gene's conditions that match the patient.
         kept_set = set(kept_indices)
-        gene_mode_cache, gene_mode_reasoning_cache = moi.build_gene_mode_cache(
-            variants, kept_indices, context_slices, _group_by_gene, self._llm,
-        )
-        recessive_gene_groups = moi.build_recessive_gene_groups(
-            variants, gene_mode_cache, kept_indices, _group_by_gene,
-        )
 
         # Layer 1 (MOI-layer restructuring): per-variant phenotype pertinence,
         # sourced from the LitVar2 evidence already in each context slice — not
@@ -1032,6 +1025,22 @@ class Pipeline:
                 if verdict is not None:
                     overlap_verdict_cache[i] = verdict
                     overlap_text_cache[i] = text
+
+        # ── Stage 1d: Mode of inheritance (after phenotype) ─────────────────
+        # Per gene, for the conditions Stage 1c matched to the patient (all of
+        # the gene's conditions when none matched): MedGen + CSV field + the
+        # literature/GeneReviews evidence, combined (AD and AR → AD_AR); CGD
+        # only when all are silent. Before reasoning (Stage 2a), which needs
+        # the mode and the compound-het groups built from it.
+        gene_mode_cache, gene_mode_reasoning_cache = moi.build_gene_mode_cache(
+            variants, kept_indices,
+            {i: _evidence_only_context(i) for i in kept_indices},
+            phenotype_list_cache, overlap_text_cache,
+            _group_by_gene, self._llm,
+        )
+        recessive_gene_groups = moi.build_recessive_gene_groups(
+            variants, gene_mode_cache, kept_indices, _group_by_gene,
+        )
 
         # ── Stage 2a: Reasoning (only on kept variants) ───────────────────────
         # Split into its own wave (rather than one combined reasoning+second_triage

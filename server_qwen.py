@@ -758,14 +758,14 @@ async def get_result(job_id: str):
     if job is None:
         raise HTTPException(status_code=404, detail="Job not found")
     events = job["events"]
-    result_data = None
     for ev in reversed(events):
         if ev.get("type") == "result":
-            result_data = ev["data"]
-            break
-    if result_data is None:
-        return {"status": "running", "events": events}
-    return {"status": "done", "result": result_data}
+            return {"status": "done", "result": ev["data"]}
+        # A job that ended in error/cancellation has no result event — report
+        # it as terminal, not "running", or pollers wait until the stale-job sweep.
+        if ev.get("type") in ("error", "cancelled"):
+            return {"status": ev["type"], "message": ev.get("message", ""), "events": events}
+    return {"status": "running", "events": events}
 
 
 @app.get("/activity/{job_id}")

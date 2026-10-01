@@ -44,6 +44,7 @@ logger = logging.getLogger(__name__)
 _PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "conclusion.txt"
 
 MAX_NEW_TOKENS_REPORT = 1500
+CONCLUSION_RETRY_REPETITION_PENALTY = 1.1   # retry only, after a response without an ACMG criteria section
 
 # Scoped to the Gene=/HGVS= fields of variant_context specifically (the
 # key=value line retrieval.py's _variant_dict_to_str builds from the input
@@ -202,11 +203,18 @@ def run_one(
         .replace("{reasoning_output}", reasoning)
         .replace("{cross_analysis_block}", cross_analysis_block))
 
-    result = llm.generate(
-        system="You are an expert clinical geneticist. Limit your response to 1000 words maximum.",
-        user=user_prompt,
-        max_tokens=MAX_NEW_TOKENS_REPORT,
-    )
+    system = "You are an expert clinical geneticist. Limit your response to 1000 words maximum."
+    result = llm.generate(system=system, user=user_prompt, max_tokens=MAX_NEW_TOKENS_REPORT)
+    if not _has_acmg_criteria_section(result):
+        # Greedy decoding can fall into a repetition loop (e.g. "000000…" to the
+        # token limit), and at temperature 0 a plain retry repeats it exactly —
+        # retry once with a repetition penalty.
+        logger.warning(
+            "[Conclusion] Response missing 'ACMG criteria' section (ended with %r) — "
+            "retrying with repetition penalty", result[-80:],
+        )
+        result = llm.generate(system=system, user=user_prompt, max_tokens=MAX_NEW_TOKENS_REPORT,
+                              repetition_penalty=CONCLUSION_RETRY_REPETITION_PENALTY)
     if not _has_acmg_criteria_section(result):
         raise SLMError(
             "Conclusion response missing required 'ACMG criteria' section "

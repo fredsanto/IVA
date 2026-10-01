@@ -12,7 +12,7 @@ tags. This scores the case observations behind the submission (ClinGen's
 replacement for the retired PP5), never the ClinVar classification itself.
 
 Which code depends on the gene's inheritance mode — gene_mode_cache
-(moi.build_gene_mode_cache: CSV → CGD → LLM tiers), passed in as data:
+(moi.build_gene_mode_cache: MedGen + CSV + literature, CGD fallback), passed in as data:
   - AD / XLD (dominant only) → PS4 [Supporting, +1]: recurrence in unrelated
     affected individuals.
   - anything else — AR, XLR, AD_AR, XLD_XLR, XL, unknown → PM3 [Supporting,

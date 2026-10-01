@@ -14,9 +14,11 @@ the single source of truth for the whole run, not just within ClinGen calls.
 """
 
 import logging
+import time
 from collections import Counter
 
 from pipeline.config import DEFAULT_GENOME_BUILD
+from pipeline.core.errors import ToolFetchError
 from pipeline.tools.autopvs1 import parse_variant_coords
 from pipeline.tools.clingen_allele import (
     ClinGenAlleleTool,
@@ -25,6 +27,9 @@ from pipeline.tools.clingen_allele import (
 )
 
 logger = logging.getLogger(__name__)
+
+_FETCH_ATTEMPTS = 3        # ClinGen network failures: tries before the job fails
+_FETCH_RETRY_DELAY = 10    # seconds between tries
 
 _SAMPLE_SIZE = 5
 
@@ -118,8 +123,21 @@ def detect_genome_build(variants: list[dict]) -> str:
         sampled += 1
         query19 = f"{nc19}:g.{pos}{ref.upper()}>{alt.upper()}"
         query38 = f"{nc38}:g.{pos}{ref.upper()}>{alt.upper()}"
-        data19, _ = tool._fetch(query19)
-        data38, _ = tool._fetch(query38)
+        # Network failure (timeout, connection reset): retry — the pipeline
+        # cannot start without a genome build, so after the last try the job fails.
+        for attempt in range(1, _FETCH_ATTEMPTS + 1):
+            try:
+                data19, _ = tool._fetch(query19)
+                data38, _ = tool._fetch(query38)
+                break
+            except ToolFetchError as e:
+                if attempt == _FETCH_ATTEMPTS:
+                    raise ToolFetchError(
+                        f"Genome build detection failed after {_FETCH_ATTEMPTS} attempts: {e}"
+                    ) from e
+                logger.warning("[build_detection] %s — attempt %d/%d, retrying in %ds",
+                               e, attempt, _FETCH_ATTEMPTS, _FETCH_RETRY_DELAY)
+                time.sleep(_FETCH_RETRY_DELAY)
 
         match19 = _clingen_genomic_match(data19, query19)
         match38 = _clingen_genomic_match(data38, query38)

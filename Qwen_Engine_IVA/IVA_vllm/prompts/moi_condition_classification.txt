@@ -1,0 +1,65 @@
+GENE: {gene}
+
+CONDITIONS TO CLASSIFY (the gene's conditions that match this patient's
+phenotype; when none match, the gene's full condition list):
+{conditions_block}
+
+EVIDENCE FOR THIS GENE (GeneReviews summaries, literature, gnomAD constraint,
+and any other retrieved context for every kept variant in this gene):
+{evidence_text}
+
+TASK — MODE OF INHERITANCE OF THE CONDITIONS ABOVE:
+
+Read the evidence and decide, SEPARATELY for each mode of inheritance, whether
+the evidence reports that THIS gene causes the conditions listed above with
+that mode. Answer every mode independently — several can be YES at once, for
+instance when the same condition is reported both in individuals with one
+variant and in individuals with two variants.
+
+A gene can cause different conditions with different inheritance. Classify
+ONLY the listed conditions: a statement about the inheritance of a different
+condition of the same gene does not count. If the evidence states the
+inheritance of only some of the listed conditions, use those.
+
+Rules:
+
+1. Answer YES for a mode only when the evidence SPECIFICALLY and AFFIRMATIVELY
+   states that THIS gene causes a listed condition with that mode — an
+   explicit inheritance statement, or affected individuals described with the
+   corresponding genotype. Do NOT count an incidental, negated, or
+   differential-diagnosis mention of a mode, or a sentence about a different
+   gene.
+
+2. A dominant-negative or gain-of-function mechanism described for a listed
+   condition is dominant inheritance, whatever the gene's gnomAD pLI/LOEUF.
+
+3. The GNOMAD GENE CONSTRAINT block (pLI/LOEUF) is gene-level LoF-tolerance
+   data, not an inheritance statement. Never answer YES or NO for a mode from
+   pLI/LOEUF alone, and never let pLI/LOEUF override an explicit inheritance
+   statement in the evidence.
+
+4. Dominant means affected individuals with a single (heterozygous,
+   monoallelic, often de novo) variant; Recessive means affected individuals
+   with two variants (homozygous, compound heterozygous, biallelic). When the
+   evidence reports both for a listed condition, both are YES. Never let one
+   mode's evidence cancel another's.
+
+5. If the evidence is silent or ambiguous about a mode for the listed
+   conditions, answer NO for that mode — do not infer a mode from general
+   plausibility or gene-family assumptions.
+
+6. Every YES must copy, word for word, the sentence or clause of the EVIDENCE
+   above that states it. Copy it from the evidence only — never write your own
+   wording. A YES whose quote is not found in the evidence is discarded.
+
+Output exactly this format — 2 to 4 sentences of reasoning, then the five
+mode lines, each on its own line, nothing after them:
+
+Reasoning: <2-4 sentences naming the source(s) you relied on, a
+dominant-negative/haploinsufficiency mechanism if the evidence discusses one,
+and how pLI/LOEUF factored in if at all>
+Dominant: YES "<sentence copied from the evidence>" | NO
+Recessive: YES "<sentence copied from the evidence>" | NO
+X-linked recessive: YES "<sentence copied from the evidence>" | NO
+X-linked dominant: YES "<sentence copied from the evidence>" | NO
+X-linked unspecified: YES "<sentence copied from the evidence>" | NO

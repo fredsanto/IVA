@@ -85,6 +85,7 @@ class HFClient(LLMClient):
         temperature: float = 0.0,
         top_p: float = 1.0,
         do_sample: bool = False,
+        repetition_penalty: float = 1.0,
     ) -> str:
         """
         Internal helper — apply chat template + run HF pipeline.
@@ -106,6 +107,7 @@ class HFClient(LLMClient):
             do_sample=do_sample,
             temperature=temperature if do_sample else None,
             top_p=top_p if do_sample else None,
+            repetition_penalty=repetition_penalty,
             pad_token_id=self.tokenizer.eos_token_id,
         )[0]["generated_text"]
         return out[len(prompt):].strip()
@@ -119,6 +121,7 @@ class HFClient(LLMClient):
         max_tokens: int = 512,
         temperature: float = 0.0,
         enable_thinking: bool = False,  # silently ignored — always False
+        repetition_penalty: float = 1.0,
     ) -> str:
         messages = [
             {"role": "system", "content": system},
@@ -130,6 +133,7 @@ class HFClient(LLMClient):
             max_new_tokens=max_tokens,
             temperature=temperature,
             do_sample=do_sample,
+            repetition_penalty=repetition_penalty,
         )
 
     def is_available(self) -> bool:
