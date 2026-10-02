@@ -24,16 +24,16 @@ especially when one or both tested parents also show a comparably low AB
 rather than a clean absent (~0) value — PRIOR REASONING's own segregation
 analysis will already have flagged this (e.g. "suggests low-level mosaicism,
 allele dropout, or a sequencing artifact"). You MUST carry that caveat forward
-explicitly into the Comment below, in plain language (e.g. "Note: proband
-AB=0.09 is well below the expected ~0.5 for a genuine heterozygous call, and
-both parents show similarly low AB (0.07, 0.11) rather than a clean absent
-value — this pattern is more consistent with a sequencing artifact or
-low-level mosaicism than a confirmed real variant, and reduces confidence in
-this finding independent of its ACMG score."). Do not let a high ACMG point
+explicitly into the Comment below, in plain language: state the proband's
+allelic balance (AB) and the parents' AB values as given in the evidence,
+against the ~0.5 expected for a genuine heterozygous call; that this pattern is
+more consistent with a sequencing artifact or low-level mosaicism than a
+confirmed real variant, and that it reduces confidence in this finding
+independent of its ACMG score. Do not let a high ACMG point
 total (from PVS1/PP4 etc., which score the variant's molecular/phenotypic
 evidence, not its call quality) silently absorb or hide this caveat — call
 quality and ACMG evidence are separate axes. A real past failure: a variant
-was scored Likely Pathogenic (9 pts, PVS1+PP4) while the report's own
+was scored Likely Pathogenic while the report's own
 segregation analysis had already flagged all three family members' AB as
 anomalously low, but that flag was never restated in the Comment carried
 forward to synthesis — it existed only in the intermediate reasoning

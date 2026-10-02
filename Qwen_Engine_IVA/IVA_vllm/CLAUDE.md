@@ -615,7 +615,7 @@ can be discarded with high confidence given the patient phenotype.
 Prompt loaded from `prompts/first_triage.txt`.
 
 Only runs when `n > TRIAGE_ENABLED_THRESHOLD` (configured in `pipeline/config.py`;
-current value: 12). When skipped, all variants are implicitly KEEP.
+current value: 0, i.e. always runs). When skipped, all variants are implicitly KEEP.
 
 Compound heterozygous candidates (two or more variants in the same gene) are
 automatically exempted from DISCARD — a DISCARD decision on any such variant is
@@ -762,6 +762,14 @@ python batch.py "$JOBS_FOLDER" --backend vllm
 `--enable-prefix-caching` — reuses KV cache for shared prompt prefixes across requests.
 Startup polling uses 60 attempts × 5 s = 5 minutes; Qwen3.5's hybrid Mamba
 architecture needs this much time on first load.
+
+### NCBI API key
+
+An NCBI API key is already configured for this deployment: it lives in
+`~/.ncbi_api_key` and `launch_qwen.sh` exports it as `NCBI_API_KEY` (10 req/s
+instead of 3). It is NOT exported in an interactive shell — a standalone script
+that imports pipeline tools (simulations, re-checks) must load it itself:
+`export NCBI_API_KEY="$(cat ~/.ncbi_api_key)"`. Never print or commit the key.
 
 ### Local / dev
 

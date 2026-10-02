@@ -6,17 +6,27 @@ PATIENT PHENOTYPE:
 GENE CONDITIONS (the gene's complete condition list; clinical features from NCBI MedGen/HPO where available):
 {conditions_block}
 
+EXCLUDED FINDINGS:
+The patient phenotype may also state findings the patient does NOT have — worded with "not", "no", "nor", "without", "absence of", "excluding", or any equivalent negation. Those are EXCLUDED FINDINGS. An excluded finding is never one of the patient's findings: it can never make a condition MATCH. Judge it semantically — a synonym or a more specific form of an excluded finding counts as that excluded finding; a broader category that merely contains it does not.
+
 TASK:
-For each condition, decide whether it covers any part of the patient's phenotype. A condition covers a patient finding when that finding, or a more specific form of it, is the condition's name or one of its listed clinical features — even if it is not the condition's main feature. When a condition has no listed features, judge it by what its name states. The MedGen entry was found by name search: if its title is clearly a different disease from the condition (a different mechanism, inheritance or clotting factor, not merely a synonym or numbered subtype), ignore its features and judge that condition by its name.
+For each condition, decide first whether it is EXCLUDED, then whether it covers any part of the patient's present phenotype.
+
+EXCLUDED — the condition's name, or one of its core defining features, is an excluded finding. A core defining feature is one the condition is named or diagnosed for, or one its listed features present as typical — not an occasional or rare one. EXCLUDED takes precedence over MATCH: a condition carrying an excluded finding is EXCLUDED even if it also lists a feature the patient has.
+MATCH — not EXCLUDED, and the condition covers a present patient finding: that finding, or a more specific form of it, is the condition's name or one of its listed clinical features — even if it is not the condition's main feature.
+NO MATCH — neither of the above.
+
+When a condition has no listed features, judge it by what its name states. The MedGen entry was found by name search: if its title is clearly a different disease from the condition (a different mechanism, inheritance or clotting factor, not merely a synonym or numbered subtype), ignore its features and judge that condition by its name.
 
 Write one line per condition, in this exact form:
-- <condition>: MATCH | NO MATCH — <at most 15 words: the matching feature, or why none>
+- <condition>: MATCH | NO MATCH | EXCLUDED — <at most 15 words: the matching feature, the excluded finding it carries, or why none>
 
 Then ONE verdict line, in exactly this form:
-CLUSTER_PHENOTYPE: YES | PARTIAL | INCIDENTAL
+CLUSTER_PHENOTYPE: YES | PARTIAL | INCIDENTAL | EXCLUDED
 
-YES        — at least one matched condition covers the patient's phenotype as a whole.
-PARTIAL    — matched conditions cover at least one distinct part of the patient's phenotype, but not all of it.
-INCIDENTAL — no condition in the list matches any part of the patient's phenotype.
+YES        — at least one MATCH condition covers the patient's present phenotype as a whole.
+PARTIAL    — MATCH conditions cover at least one distinct part of the patient's present phenotype, but not all of it.
+EXCLUDED   — no condition is MATCH, and at least one condition is EXCLUDED.
+INCIDENTAL — no condition is MATCH or EXCLUDED.
 
-One MATCH is enough for YES or PARTIAL, however many other conditions do not match.
+One MATCH is enough for YES or PARTIAL, however many other conditions do not match or are EXCLUDED. When the patient phenotype states no excluded finding, never write EXCLUDED.

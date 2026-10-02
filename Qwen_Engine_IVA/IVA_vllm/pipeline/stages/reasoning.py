@@ -64,8 +64,10 @@ _INCLUDE_CASE_RE = re.compile(r"Include-case:\s*(.+)", re.IGNORECASE)
 _EXCLUDE_CASE_RE = re.compile(r"Exclude-case:\s*(.+)", re.IGNORECASE)
 _DECISION_RE     = re.compile(r"Decision:\s*(INCLUDE|EXCLUDE)", re.IGNORECASE)
 _CLUSTER_MATCH_RE = re.compile(
-    r"CLUSTER_PHENOTYPE:\s*(YES|PARTIAL|NONE|INCIDENTAL)", re.IGNORECASE
+    r"CLUSTER_PHENOTYPE:\s*(YES|PARTIAL|NONE|INCIDENTAL|EXCLUDED)", re.IGNORECASE
 )
+# Stage 1c per-condition call token: "- <condition>: MATCH | NO MATCH | EXCLUDED — ..."
+_CONDITION_CALL_RE = re.compile(r":\s*\**\s*(NO MATCH|MATCH|EXCLUDED)\b", re.IGNORECASE)
 _PHENOTYPE_TAG_RE = re.compile(
     r"^\s*PHENOTYPE:\s*(.+)$", re.IGNORECASE | re.MULTILINE
 )
@@ -180,9 +182,14 @@ def run_phenotype_overlap(
     an eponymous syndrome with retinal features was judged NONE because
     nothing in the evidence said what that syndrome involves.
 
-    Returns (verdict, text): verdict is "YES", "PARTIAL" or "INCIDENTAL", or
-    None when the list is empty/NA or the output has no verdict line — the
-    caller then keeps Stage 1's own verdict.
+    Returns (verdict, text): verdict is "YES", "PARTIAL", "INCIDENTAL" or
+    "EXCLUDED", or None when the list is empty/NA or the output has no verdict
+    line — the caller then keeps Stage 1's own verdict.
+
+    EXCLUDED (the patient phenotype states findings the patient does NOT have)
+    is decided per condition: the gene's verdict is EXCLUDED only when no
+    condition is MATCH and at least one is EXCLUDED — recomputed here from the
+    per-condition lines, so the verdict line cannot contradict them.
     """
     from pipeline.tools.medgen_features import split_condition_list, condition_features
 
@@ -209,6 +216,15 @@ def run_phenotype_overlap(
     verdict = m.group(1).upper() if m else None
     if verdict == "NONE":  # the list is non-empty, so "no match" is INCIDENTAL
         verdict = "INCIDENTAL"
+    calls = [
+        m.group(1).upper()
+        for line in result.splitlines() if line.lstrip().startswith("- ")
+        for m in [_CONDITION_CALL_RE.search(line)] if m
+    ]
+    if "MATCH" not in calls and "EXCLUDED" in calls:
+        verdict = "EXCLUDED"
+    elif verdict == "EXCLUDED" and "MATCH" in calls:
+        verdict = "PARTIAL"  # a clean MATCH condition keeps the gene
     return verdict, result
 
 

@@ -16,7 +16,7 @@ INSUFFICIENT" EXCLUDE RULE ABOVE:
    Check the variant's Zygosity value in VARIANT DATA above (this may be a
    stated value from the input, e.g. "hom"/"Homozygous", or a value the
    pipeline itself derived from allelic balance when no Zygosity column
-   existed, e.g. "Homozygous (derived from AB=0.95; ...)" — treat both the
+   existed, i.e. "Homozygous (derived from AB=<value>; ...)" — treat both the
    same way; a derived call is still a zygosity call, not an absence of one).
    - If Zygosity says HOMOZYGOUS (or hemizygous, for an X-linked gene in a
      male) in any form: the "single heterozygous variant insufficient"
