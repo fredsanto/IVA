@@ -465,3 +465,25 @@ Results persist on disk regardless of server restarts. In-memory jobs expire aft
 - Pipeline package at `Qwen_Engine_IVA/IVA_vllm` (direct mode)
 - Conda env at `Qwen_Engine_IVA/env_vllm_0606` (contains vLLM + pipeline deps)
 - venv at `.venv_qwen` (contains FastAPI server deps)
+
+## License
+
+Copyright (C) 2026 Centre hospitalier universitaire vaudois (CHUV), Federico Santoni and Eric Ducret.
+
+This software is dual-licensed:
+
+- **Open source:** GNU Affero General Public License v3.0 (AGPL-3.0), see
+  [`LICENSE`](LICENSE). You may use, modify and redistribute it under the AGPL
+  terms. If you run a modified version as a network service, you must make the
+  complete source code of that version available to its users.
+- **Commercial:** for use that cannot meet the AGPL terms (for example in a
+  proprietary product or service), a commercial license is available. Contact
+  federico.santoni@chuv.ch.
+
+### Third-party terms
+
+The pipeline calls external services and models with their own terms, which
+this license does not cover. Notably, SpliceAI scores are free for academic and
+not-for-profit use only (other use requires a license from Illumina), and the
+SpliceAI-lookup (Broad Institute) and AutoPVS1 (BGI) web services have their own
+terms of use. The language model (Qwen3.5-9B) and vLLM are Apache-2.0.
