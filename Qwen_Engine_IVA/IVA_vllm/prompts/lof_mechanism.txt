@@ -1,0 +1,28 @@
+Gene: {gene}
+Autosomal dominant condition(s) of {gene} (MedGen): {conditions}
+gnomAD constraint: {constraint}
+ClinVar Pathogenic/Likely pathogenic variants in {gene}: {clinvar_counts}
+
+Abstracts:
+{abstracts}
+
+Question 1: for the autosomal dominant disease(s) caused by {gene}, what disease mechanism do these abstracts report for the disease-causing variants?
+Choose exactly one:
+- LOSS_OF_FUNCTION: haploinsufficiency or loss of function of one allele causes the dominant disease
+- GAIN_OF_FUNCTION: the variant protein gains a new or increased activity
+- DOMINANT_NEGATIVE: the variant protein interferes with the normal protein
+- UNKNOWN: the abstracts do not state the mechanism for the dominant disease
+Answer UNKNOWN unless an abstract states the mechanism explicitly for {gene}. A mechanism stated for a different gene does not count.
+
+Question 2: does an abstract report an experimental functional study (cell model, animal model, or biochemical/biophysical assay of the variant protein) that demonstrates the mechanism you chose? A statement, a review, an in-silico prediction or a clinical observation alone is not a functional study.
+
+Question 3: in 2-4 sentences, reason whether a heterozygous variant in {gene} is more plausibly pathogenic through loss of function (haploinsufficiency), gain of function or a dominant-negative effect. Weigh the gnomAD constraint (a gene that tolerates heterozygous loss of function in the population is unlikely to cause dominant disease by haploinsufficiency), the ClinVar missense versus nonsense/frameshift split, and the abstracts. Cite only PMIDs from the abstracts above. Say so when the evidence is insufficient.
+
+Reply in exactly this format:
+MECHANISM: <one label>
+QUOTE: <one sentence copied verbatim from an abstract that states the mechanism, or NONE>
+PMID: <PMID of that abstract, or NONE>
+FUNCTIONAL: <YES or NO>
+FUNCTIONAL_QUOTE: <one sentence copied verbatim from an abstract that describes the experiment and its result, or NONE>
+FUNCTIONAL_PMID: <PMID of that abstract, or NONE>
+REASONING: <2-4 sentences on one line>

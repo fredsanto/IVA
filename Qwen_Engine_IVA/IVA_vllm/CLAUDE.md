@@ -78,6 +78,7 @@ variant-pipeline/
 │   │   ├── clinvar_gene_stats.py    ← ClinVar gene-level P/LP missense vs. nonsense/frameshift counts
 │   │   ├── clingen_allele.py        ← ClinGen Allele Registry variant resolution (CAid, cross-refs)
 │   │   ├── genereviews.py           ← GeneReviews clinical-description fetch (NCBI Bookshelf) — gene-scoped, class-cached
+│   │   ├── repeat_region.py         ← UCSC repeat-region check for in-frame indels (PM4 grounding)
 │   │   ├── websearch.py             ← shared NCBI E-utilities helpers (_ncbi_get, rate limiter)
 │   │   ├── websearch_agent.py       ← WebSearchAgentTool: PubMed + bioRxiv/medRxiv (Crossref) search for genes with no curated entry
 │   │   └── ncbi.py                  ← NCBIFetchTool (ClinVar/PubMed fetch helper)
@@ -126,7 +127,7 @@ Unknown columns are ignored. Missing columns are filled with `"NA"`.
 | `OMIM_phenotype` | str | `Gitelman syndrome` | Associated OMIM disease name |
 | `OMIM_inheritance` | str | `Autosomal recessive` | Full inheritance string |
 | `Inheritance` | str | `AR` | Short code: AR, AD, XL, … |
-| `ClinVar_class` | str | `Pathogenic` | ClinVar clinical significance |
+| `ClinVar_class` | str | `Pathogenic` | Never read from the upload: filled by `clinvar_gene_stats` from the live ClinVar record's aggregate classification, else `NA`. InterVar columns are dropped at ingestion |
 | `Allelic_balance` | float | `0.5393` | VAF / allele balance |
 | `Frequency` | float | `1.19E-05` | Population allele frequency (gnomAD) |
 | `CADD_score` | float | `26` | CADD PHRED score |
@@ -404,11 +405,13 @@ note the missing evidence in the report rather than reasoning from a gap.
 | `litvar2_summary` | `SLMTool` | 1 (parallel) | RS_ID valid **or** Gene present (Python gate) |
 | `spliceai` | `NetworkTool` | 1 (parallel) | Python gate — skips synonymous, intergenic, UTR, unresolvable coords |
 | `gnomad_constraint` | `NetworkTool` | 1 (parallel) | Gene present (manifest gate) |
-| `clinvar_gene_stats` | `NetworkTool` | 1 (parallel) | Gene present (manifest gate) |
+| `clinvar_gene_stats` | `NetworkTool` | 3 (parallel) | Gene present (manifest gate); writes the live ClinVar aggregate classification into `ClinVar_class` |
 | `clingen_allele` | `NetworkTool` | 1 (parallel) | Python gate — a usable query can be built (transcript+cDNA, clean HGVS, or genomic SNV coordinates) |
 | `genereviews` | `NetworkTool` | 1 (parallel) | Gene present (manifest gate) |
 | `autopvs1` | `NetworkTool` | 2 (parallel) | Python gate — LoF/frameshift/splice variants only |
-| `websearch_agent` | `SLMTool` | 3 (serial) | No manifest gate — `run()` searches literature only when GeneReviews, OMIM phenotype, MedGen and CGD are all empty for the gene; ClinVar submission-level check for P/LP variants always |
+| `repeat_region` | `NetworkTool` | 3 (parallel) | No gate — `run()` acts only on stop-loss Types and AutoPVS1 `Inframe_deletion`/`Inframe_insertion` variants; UCSC simpleRepeat + RepeatMasker (Simple_repeat/Low_complexity) overlap → "PM4 REPEAT CHECK: MET/NOT MET", read by `core/acmg_pm4.py` (PM4 +2, never with PVS1) |
+| `lof_mechanism` | helper (not a manifest tool) | after second triage | Called from `pipeline.py` only for variants that passed second triage (phenotype check included) — never for genes that failed it; cached per gene; block appended to the variant context before cross-analysis/conclusion; PubMed mechanism abstracts + MedGen dominant conditions + gnomAD pLI/LOEUF + ClinVar consequence split → one SLM call (`prompts/lof_mechanism.txt`) for the dominant-disease mechanism and a functional study, both quotes checked against the cited abstract; `LOF MECHANISM VERDICT: NO_PVS1` only for gain-of-function/dominant-negative with a verified functional study. Read by `core/acmg_pvs1.validate_pvs1_mechanism`, which also caps PVS1 at Supporting for LoF variants in ClinVar missense-predominant genes and notes "no PVS1" for missense in nonsense/frameshift-predominant genes; `NO_PVS1` is applied only to a heterozygous LoF variant with no other variant in the gene. Every variant gets a `**Gene mechanism:**` line (pLI, LOEUF, ClinVar split, verified mechanism quotes, SLM mechanism reasoning with PMIDs restricted to the abstracts); it and the `**PVS1 mechanism note:**` line are carried into the MOI-layer blocks of the final report |
+| `websearch_agent` | `SLMTool` | 4 (serial) | No manifest gate — `run()` searches literature only when GeneReviews, OMIM phenotype, MedGen and CGD are all empty for the gene; ClinVar submission-level check for P/LP variants always |
 
 **`litvar2_summary`** runs a gene-first three-track search:
 
@@ -418,7 +421,7 @@ note the missing evidence in the report rather than reasoning from a gap.
 
 All tracks that yield evidence are combined in the output separated by `---`. `_disease_query` is resolved once per pipeline run via a single SLM call (`_resolve_disease_query`), cached as an instance attribute, and reused for all variants. The resolver returns 2–4 PubMed-compatible disease terms as a PubMed OR expression, preferring MeSH-indexed terms for broad recall.
 
-**`autopvs1`** uses a HGVS-first query strategy: when a valid transcript HGVS is available (`NM_xxx:c.xxx`), it queries AutoPVS1 via `/search?q={hgvs}` so AutoPVS1 resolves coordinates internally — immune to stale CSV coords. Falls back to VCF-style coords (`/variant/{build}/{chrom}-{pos}-{ref}-{alt}`) when HGVS is absent or the search path fails. Results are discarded when AutoPVS1 returns `variant_type="Intergenic"` or the returned gene does not match the expected gene. `pvs1_applicable` is `True` only when a flowchart is present in the response and no "incompatible with recommendations" message is found.
+**`autopvs1`** uses a HGVS-first query strategy: when a valid transcript HGVS is available (`NM_xxx:c.xxx`), it queries AutoPVS1 via `/search?q={hgvs}` so AutoPVS1 resolves coordinates internally — immune to stale CSV coords. Falls back to VCF-style coords (`/variant/{build}/{chrom}-{pos}-{ref}-{alt}`) when HGVS is absent or the search path fails. Results are discarded when AutoPVS1 returns `variant_type="Intergenic"` or the returned gene does not match the expected gene. `pvs1_applicable` is `True` only when a flowchart is present in the response and no "incompatible with recommendations" message is found. Recessive-gene override: on the NF4 path, when AutoPVS1 stopped at Unmet only because the exon's LoF population frequency exceeds its own 0.1% threshold, and the variant's Inheritance (or AutoPVS1's disease table) includes AR, the tool computes the share of protein removed (truncation residue from pHGVS, NP_ length from NCBI) and reports `PVS1 strength: Strong` (>10%) or `Moderate`, with a `PVS1 override` line; `core/acmg_pvs1.py` adds PVS1 at that strength if the model's list has none.
 
 **`spliceai`** queries the Broad Institute SpliceAI API and returns delta scores
 (DS_AG, DS_AL, DS_DG, DS_DL) for acceptor/donor gain and loss, along with the
@@ -431,7 +434,10 @@ manifest gate additionally skips the API call when the canonical `SpliceAI_score
 field is already populated — i.e. the SLM header-interpretation step (see
 `core/normalizer.py`) recognized a precomputed SpliceAI column in the input,
 regardless of its raw name (`SpliceAI_v13`, `spliceai_concat`, or any other
-annotation-tool naming). Compound annotation strings bundling multiple
+annotation-tool naming). When the input header has a SpliceAI column but this
+variant's value is empty, `run()` reports "No significant score from SpliceAI"
+without calling the API (the annotation already covered the variant; the public
+API bans the caller's IP on the first 429). Compound annotation strings bundling multiple
 delta/position values (e.g. ANNOVAR-style pipe-delimited output) are collapsed
 to a single max delta score by `_parse_spliceai_value()` based on the value's
 shape, not the column's name. Output labels are enriched for SLM readability

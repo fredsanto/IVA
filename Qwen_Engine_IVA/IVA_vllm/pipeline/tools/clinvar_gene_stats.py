@@ -661,6 +661,11 @@ class ClinVarGeneStatsTool(NetworkTool):
                 f"ClinVar aggregate classification (official consensus call): {aggregate_classification}\n"
                 if aggregate_classification else ""
             )
+            # ClinVar_class comes only from this live record (the normalizer
+            # never takes it from the upload); later stages read it from the
+            # variant dict.
+            if aggregate_classification:
+                variant["ClinVar_class"] = aggregate_classification
             status = clinvar_status(tally, result["has_functional_ref"], result["has_case_ref"])
             variant_block = (
                 f"CLINVAR STATUS: {status}\n"

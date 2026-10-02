@@ -33,7 +33,8 @@ from pipeline.core.acmg_pm1 import validate_pm1
 from pipeline.core.acmg_pm2 import validate_pm2
 from pipeline.core.acmg_bp6 import validate_bp6
 from pipeline.core.acmg_pp4 import validate_pp4, validate_pp4_full_coverage
-from pipeline.core.acmg_pvs1 import validate_pvs1
+from pipeline.core.acmg_pvs1 import validate_pvs1, validate_pvs1_mechanism, gene_mechanism_line
+from pipeline.core.acmg_pm4 import validate_pm4
 from pipeline.core.acmg_points import relabel_all_points_lines, recompute_and_fix_totals
 
 if TYPE_CHECKING:
@@ -248,6 +249,10 @@ def run_one(
     # own prose in `result` claims about phenotype fit.
     result = validate_pp4_full_coverage(result, reasoning)
     result = validate_pvs1(result, variant_context)
+    result = validate_pvs1_mechanism(result, variant_context, other_variant_in_gene=bool(cross_analysis))
+    result = gene_mechanism_line(result, variant_context)
+    # PM4 after PVS1: never stacks on a PVS1 that survived validation.
+    result = validate_pm4(result, variant_context)
     # PS3 never stacks on PVS1 (functional loss is what PVS1 already scores).
     result = block_ps3_under_pvs1(result)
     # Unconditional final pass: the validators above only adjust the stated

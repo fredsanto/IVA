@@ -2,12 +2,13 @@ name: websearch_agent
 description: "PubMed + bioRxiv/medRxiv (via Crossref) literature search for genes absent from GeneReviews, OMIM, MedGen and CGD; forced ClinVar submission-level check for P/LP variants."
 enabled: true
 
-order: 3
+order: 4
 parallel: false
 
 # No manifest gate — run() itself decides: literature search only when every
-# curated source is empty for the gene. Order 3 so genereviews (order 1) has
-# already filled its class-level cache.
+# curated source is empty for the gene. Order 4 so genereviews (order 1) has
+# already filled its class-level cache and clinvar_gene_stats (order 3) has
+# filled ClinVar_class from the live ClinVar record.
 
 compress:
   enabled: true

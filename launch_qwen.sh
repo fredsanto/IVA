@@ -1,8 +1,8 @@
 #!/bin/bash --login
 #SBATCH --job-name=server_qwen
 #SBATCH --time=24:00:00
-#SBATCH --cpus-per-task=4
-#SBATCH --mem=16G
+#SBATCH --cpus-per-task=2
+#SBATCH --mem=8G
 #SBATCH --partition=gpu
 #SBATCH --gres=gpu:1
 #SBATCH --output=server_qwen_%j.log
@@ -19,6 +19,10 @@
 #   NCBI_MAX_RPS=10                 (NCBI requests/s cap; default 10 with key, else 3.
 #                                    NCBI limits per key — N servers sharing the key:
 #                                    10/N each, e.g. 4 servers → 2.5)
+#   DRIVER_CMD="..."                (optional batch client, run from this directory
+#                                    once vLLM is ready, with SERVER_HOST=localhost
+#                                    and SERVER_PORT=$PORT; the job ends when it exits)
+#   DRIVER_LOG=path                 (driver output; default driver_<JOBID>.log)
 
 # ── Paths (defined first — used immediately below) ─────────────────────────────
 # SLURM sets SLURM_SUBMIT_DIR to the directory `sbatch` was run from — per the
@@ -92,20 +96,34 @@ trap 'kill "$VLLM_PID" 2>/dev/null' EXIT INT TERM
 # ── vLLM readiness watcher (background, non-blocking) ─────────────────────────
 # Web UI does NOT wait on this — it starts immediately below. This just logs
 # when the model finishes loading so you know when /analyze will actually work.
+# With DRIVER_CMD set, the batch client runs here once vLLM is ready, inside
+# this job (a separate CPU job would sit idle waiting on HTTP replies), and the
+# job is cancelled when the client exits or vLLM never comes up.
 (
+    ready=0
     for i in $(seq 1 120); do
         model_id=$(curl -sf "http://localhost:${VLLM_PORT}/v1/models" 2>/dev/null \
                    | python3 -c "import sys,json; d=json.load(sys.stdin); print(d['data'][0]['id'])" 2>/dev/null || true)
         if [[ "$model_id" == "Qwen/Qwen3.5-9B" ]]; then
             echo "[launch] vLLM ready (Qwen/Qwen3.5-9B) after $((i * 5))s"
-            exit 0
+            ready=1
+            break
         elif [[ -n "$model_id" ]]; then
             echo "[launch] ERROR: vLLM port ${VLLM_PORT} serving wrong model: $model_id (not Qwen/Qwen3.5-9B)"
-            exit 1
+            break
         fi
         sleep 5
     done
-    echo "[launch] ERROR: vLLM did not become ready within 600s. See vllm_server.log"
+    [ "$ready" = 1 ] || [ -n "$model_id" ] || echo "[launch] ERROR: vLLM did not become ready within 600s. See vllm_server.log"
+    [ -n "$DRIVER_CMD" ] || exit 0
+    if [ "$ready" = 1 ]; then
+        driver_log="${DRIVER_LOG:-$SERVERQWN_DIR/driver_${SLURM_JOB_ID}.log}"
+        echo "[launch] Driver starting (log: $driver_log)"
+        SERVER_HOST=localhost SERVER_PORT="$PORT" bash -c "$DRIVER_CMD" > "$driver_log" 2>&1
+        echo "[launch] Driver exited with status $?"
+    fi
+    echo "[launch] Ending job"
+    scancel "$SLURM_JOB_ID"
 ) &
 
 # ── Backend-specific setup ────────────────────────────────────────────────────

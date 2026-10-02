@@ -57,6 +57,7 @@ from pipeline.tools          import (
     AutoPVS1Tool, LitVar2SummaryTool, SpliceAITool, WebSearchAgentTool,
     GnomadConstraintTool, GnomadFrequencyTool, ClinVarGeneStatsTool,
     ClinVarResidueSearchTool, ClinVarHotspotTool, UniProtDomainTool, ClinGenAlleleTool, GeneReviewsTool,
+    RepeatRegionTool, LofMechanismTool,
 )
 from pipeline.tools.clinvar_gene_stats import classify_consequence_counts
 from pipeline.tools.gnomad_constraint  import (
@@ -466,7 +467,10 @@ class Pipeline:
             UniProtDomainTool(),
             ClinGenAlleleTool(),
             GeneReviewsTool(),
+            RepeatRegionTool(),
         ]
+        # Not a manifest tool: run only for variants that passed second triage.
+        self._lof_mechanism = LofMechanismTool()
         # Direct reference for the phenotype-agnostic condition-inventory search
         # (Stage 1b, pipeline.run()) — called outside the manifest/gate system
         # since it isn't per-variant-gated the way the manifest-driven litvar2
@@ -1349,6 +1353,29 @@ class Pipeline:
             "[Pipeline] Second triage: %d included, %d excluded.",
             len(include_indices), len(exclude_indices),
         )
+
+        # ── Stage 3.2: Gene disease mechanism (included variants only) ─────────
+        #     PubMed + SLM lookup of the dominant-disease mechanism (LoF / GoF /
+        #     dominant negative), appended to the variant context for PVS1
+        #     (acmg_pvs1.validate_pvs1_mechanism) and the report's "Gene
+        #     mechanism" line. Never run for a variant that failed second
+        #     triage (phenotype check included). One lookup per gene.
+        mech_genes: dict[str, int] = {}
+        for i in include_indices:
+            mech_genes.setdefault(variants[i].get("Gene", "NA"), i)
+        mech_blocks: dict[str, str | None] = {}
+        with ThreadPoolExecutor(max_workers=max(1, min(MAX_WORKERS_LLM, len(mech_genes)))) as pool:
+            futures = {pool.submit(self._lof_mechanism.block_for, gene, context_slices[i], self._llm): gene
+                       for gene, i in mech_genes.items()}
+            for future in as_completed(futures):
+                try:
+                    mech_blocks[futures[future]] = future.result()
+                except Exception as exc:
+                    logger.warning("[Pipeline] Gene mechanism lookup failed for %s: %s", futures[future], exc)
+        for i in include_indices:
+            block = mech_blocks.get(variants[i].get("Gene", "NA"))
+            if block:
+                context_slices[i] = context_slices[i].rstrip() + "\n\n[LOF_MECHANISM]\n" + block + "\n"
 
         # ── Stage 3.5: Gene-level cross-analysis (included variants only) ──────
         gene_groups_included: dict[str, list[int]] = defaultdict(list)
