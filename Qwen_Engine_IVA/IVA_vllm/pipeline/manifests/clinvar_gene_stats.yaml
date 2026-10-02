@@ -7,8 +7,10 @@ enabled: true
 # own weaker HGVS-only resolution — clingen_allele.py is order 1 and must
 # have fully completed before this tool reads its output, or the lookup
 # silently misses cases clingen_allele would have caught (see the note in
-# clinvar_gene_stats.py's run() for the RYR1/HGVS="NA" case this fixes).
-order: 2
+# clinvar_gene_stats.py's run() for the HGVS="NA" case this fixes).
+# order 3 (not 2): its own fallback lookup reads AutoPVS1's normalized cHGVS
+# (context.all_outputs["autopvs1"], order 2), which must have completed.
+order: 3
 parallel: true
 
 gate:
