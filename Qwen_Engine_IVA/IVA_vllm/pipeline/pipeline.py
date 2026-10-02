@@ -18,7 +18,7 @@ Public API:
 Per-variant flow:
 
   retrieval:         variants → list[str]  (one context slice per variant)
-  first_triage:      per slice → KEEP/DISCARD  (skipped if n <= TRIAGE_ENABLED_THRESHOLD)
+  first_triage:      per slice → KEEP/DISCARD  (skipped if n <= TRIAGE_ENABLED_THRESHOLD; 0 = always run)
   reasoning:         kept slices → dict[int, str]  (one reasoning block per kept variant)
   cross_analysis:    per gene with ≥2 tier-1 variants → dict[gene, str]
   conclusion:        tier-1 slices + reasoning + cross_analysis → dict[int, str]
@@ -38,7 +38,7 @@ MAX_WORKERS          = 64   # first_triage (vLLM calls, runs across all variants
                              # raised from 32 to test whether this all-variant stage,
                              # not reasoning/conclusion's smaller kept-variant pool, is
                              # the actual bottleneck
-_CLUSTER_LINE_RE = re.compile(r"(CLUSTER_PHENOTYPE:\s*)(YES|PARTIAL|NONE|INCIDENTAL)", re.IGNORECASE)
+_CLUSTER_LINE_RE = re.compile(r"(CLUSTER_PHENOTYPE:\s*)(YES|PARTIAL|NONE|INCIDENTAL|EXCLUDED)", re.IGNORECASE)
 MAX_WORKERS_LLM      = 16   # reasoning/conclusion (vLLM calls, GPU-bound)
 
 from pipeline.config          import (
@@ -57,6 +57,7 @@ from pipeline.tools          import (
     AutoPVS1Tool, LitVar2SummaryTool, SpliceAITool, WebSearchAgentTool,
     GnomadConstraintTool, GnomadFrequencyTool, ClinVarGeneStatsTool,
     ClinVarResidueSearchTool, ClinVarHotspotTool, UniProtDomainTool, ClinGenAlleleTool, GeneReviewsTool,
+    RepeatRegionTool, LofMechanismTool,
 )
 from pipeline.tools.clinvar_gene_stats import classify_consequence_counts
 from pipeline.tools.gnomad_constraint  import (
@@ -233,8 +234,8 @@ def _build_gene_evidence_table(
     """
     One block per gene in the variant set: ClinVar P/LP missense:nonsense/FS
     ratio (the same counts that gate BP1/PP2), gnomAD pLI/LOEUF, this gene's
-    inheritance-mode determination (with reasoning, if the mode was resolved
-    by the LLM tier — see moi.build_gene_mode_cache), and this gene's
+    inheritance-mode determination (with each source's contribution — see
+    moi.build_gene_mode_cache), and this gene's
     representative variant's own gnomAD allele frequency + homozygote/
     heterozygote carrier counts (never present in the input CSV, regardless
     of whether a plain AF was already supplied there).
@@ -293,10 +294,9 @@ def _build_gene_evidence_table(
         reasoning = gene_mode_reasoning_cache.get(gene, "")
         mode_label = moi.MODE_LABELS.get(mode, moi.MODE_LABELS[""])
         if reasoning:
-            # Only resolved via the LLM tier (tiers 1/2 are unambiguous
-            # structured facts and carry no reasoning text) — surface the
-            # justification so the mode call is auditable, not a silent label.
-            lines.append(f"  Inheritance mode (literature-reasoned): {mode_label} — {reasoning}")
+            # Each source's contribution (MedGen, CSV, literature/GeneReviews,
+            # CGD fallback) — the mode call is auditable, not a silent label.
+            lines.append(f"  Inheritance mode: {mode_label} — {reasoning}")
         elif mode:
             lines.append(f"  Inheritance mode (CSV/CGD): {mode_label}")
 
@@ -467,7 +467,10 @@ class Pipeline:
             UniProtDomainTool(),
             ClinGenAlleleTool(),
             GeneReviewsTool(),
+            RepeatRegionTool(),
         ]
+        # Not a manifest tool: run only for variants that passed second triage.
+        self._lof_mechanism = LofMechanismTool()
         # Direct reference for the phenotype-agnostic condition-inventory search
         # (Stage 1b, pipeline.run()) — called outside the manifest/gate system
         # since it isn't per-variant-gated the way the manifest-driven litvar2
@@ -733,15 +736,9 @@ class Pipeline:
         # Scoped to recessive-relevant inheritance only — a second variant in a
         # purely dominant gene doesn't change the first variant's standing.
         # Inheritance-mode classification and compound-het gene grouping live in
-        # pipeline/core/moi.py (relocated so the MOI-layer stage modules can
-        # import this logic directly) — same behavior, just no longer inline here.
+        # pipeline/core/moi.py. Both run after Stage 1c (below): the mode is
+        # decided for the gene's conditions that match the patient.
         kept_set = set(kept_indices)
-        gene_mode_cache, gene_mode_reasoning_cache = moi.build_gene_mode_cache(
-            variants, kept_indices, context_slices, _group_by_gene, self._llm,
-        )
-        recessive_gene_groups = moi.build_recessive_gene_groups(
-            variants, gene_mode_cache, kept_indices, _group_by_gene,
-        )
 
         # Layer 1 (MOI-layer restructuring): per-variant phenotype pertinence,
         # sourced from the LitVar2 evidence already in each context slice — not
@@ -840,12 +837,38 @@ class Pipeline:
             X-linked variant (e.g. absent consanguinity) and downweight or
             exclude the variant on that basis alone. Handed to the prompts
             as a stated fact, same pattern as _inheritance_mode_block."""
-            zyg = str(variants[i].get("Zygosity", "") or "").strip().lower()
-            if "hom" not in zyg:
-                return ""
             if moi.gene_chromosome(variants, [i]) != "X":
                 return ""
+            zyg = str(variants[i].get("Zygosity", "") or "").strip().lower()
+            ab = variants[i].get("Allelic_balance")
+            ab_class = segregation.classify_ab_ratio(ab)
             gene = variants[i].get("Gene", "NA")
+            # Hemizygous is defined by allelic balance, never by phenotype,
+            # inheritance mode or an assumed patient sex: outside the
+            # pseudoautosomal regions a male has one X, so a heterozygous AB is
+            # incompatible with a hemizygous call. Real observed failure: a chrX
+            # variant at het AB was reasoned into "hemizygous male" because the
+            # gene's disease affects males, and reported causative on that basis.
+            try:
+                pos = int(float(variants[i].get("Position", "")))
+            except (TypeError, ValueError):
+                pos = None
+            in_par = pos is not None and (pos < 2_790_000 or pos > 154_900_000)
+            if ab_class == "het" and not in_par:
+                return (
+                    "\n--- ZYGOSITY FACT (backend-determined from allelic balance) ---\n"
+                    f"Gene {gene} is on chrX (outside the pseudoautosomal regions) and "
+                    f"the proband's allelic balance is {ab} — the heterozygous range "
+                    "(0.3-0.7). This variant is HETEROZYGOUS, NOT hemizygous: a "
+                    "hemizygous call (single X allele) reads allelic balance near 1.0. "
+                    "Treat the patient as heterozygous for this variant — a female "
+                    "carrier, or in a male a sequencing artifact or mosaic call. Do NOT "
+                    "assume the patient is male, do NOT call it hemizygous, and do NOT "
+                    "apply hemizygous/affected-male reasoning, whatever the gene's "
+                    "disease, inheritance mode or the patient's phenotype suggests.\n"
+                )
+            if ab_class != "hom" and not (ab_class == "uncertain" and "hom" in zyg):
+                return ""
             return (
                 "\n--- ZYGOSITY CAVEAT (backend-determined) ---\n"
                 f"Gene {gene} is on chrX and Zygosity reads Homozygous, but patient "
@@ -1033,6 +1056,22 @@ class Pipeline:
                     overlap_verdict_cache[i] = verdict
                     overlap_text_cache[i] = text
 
+        # ── Stage 1d: Mode of inheritance (after phenotype) ─────────────────
+        # Per gene, for the conditions Stage 1c matched to the patient (all of
+        # the gene's conditions when none matched): MedGen + CSV field + the
+        # literature/GeneReviews evidence, combined (AD and AR → AD_AR); CGD
+        # only when all are silent. Before reasoning (Stage 2a), which needs
+        # the mode and the compound-het groups built from it.
+        gene_mode_cache, gene_mode_reasoning_cache = moi.build_gene_mode_cache(
+            variants, kept_indices,
+            {i: _evidence_only_context(i) for i in kept_indices},
+            phenotype_list_cache, overlap_text_cache,
+            _group_by_gene, self._llm,
+        )
+        recessive_gene_groups = moi.build_recessive_gene_groups(
+            variants, gene_mode_cache, kept_indices, _group_by_gene,
+        )
+
         # ── Stage 2a: Reasoning (only on kept variants) ───────────────────────
         # Split into its own wave (rather than one combined reasoning+second_triage
         # call per variant) so that, for compound-het candidate genes, every kept
@@ -1138,6 +1177,13 @@ class Pipeline:
                 "the causative section (section 2). Do NOT let a high "
                 "PVS1/PM2/PS2 score override this verdict, and do NOT re-derive "
                 "or second-guess it from the reasoning narrative."
+            ),
+            "EXCLUDED": (
+                "EXCLUDED — the patient phenotype states findings the patient does "
+                "NOT have, and every condition of this gene that could relate to the "
+                "patient carries one of those excluded findings as a core feature "
+                "(see the per-condition lines below). This gene does not explain "
+                "this patient: the variant is EXCLUDED, regardless of its ACMG score."
             ),
             "UNKNOWN": (
                 "UNKNOWN — Stage 1 reasoning did not produce a clear verdict; judge "
@@ -1251,6 +1297,28 @@ class Pipeline:
                     "[Pipeline] Variant %d (%s) second triage → %s", i + 1, gene, decision
                 )
 
+        # ── Excluded-phenotype gate: Stage 1c verdict EXCLUDED (the gene's only
+        #     patient-relevant conditions carry a finding the patient phenotype
+        #     says the patient does NOT have) forces EXCLUDE, whatever second
+        #     triage decided. Justification = the EXCLUDED per-condition lines.
+        for i in triage_targets:
+            if cluster_match_cache.get(i) != "EXCLUDED" or inclusion_decisions.get(i) != "INCLUDE":
+                continue
+            excluded_lines = "; ".join(
+                l.strip().lstrip("- ") for l in _per_condition_lines(i).splitlines()
+                if "EXCLUDED" in l.upper()
+            )
+            logger.info(
+                "[Pipeline] Variant %d (%s): CLUSTER_PHENOTYPE EXCLUDED — forced EXCLUDE (%s)",
+                i + 1, variants[i].get("Gene", "?"), excluded_lines,
+            )
+            second_triage_justifications[i] = (
+                f"[excluded phenotype — gene's conditions carry a finding the patient "
+                f"does not have: {excluded_lines} — original: INCLUDE: "
+                f"{second_triage_justifications.get(i, '')}]"
+            )
+            inclusion_decisions[i] = "EXCLUDE"
+
         # ── ACMG SF override: force INCLUDE for actionable variants that reached
         #     a second-triage decision (reasoning_failed ones are left EXCLUDEd —
         #     there is no reasoning text to build a conclusion/report block from). ─
@@ -1300,13 +1368,13 @@ class Pipeline:
         #     causative for a phenotype its own gene-disease evidence explicitly
         #     does not cover. Being a real biallelic pair is necessary but not
         #     sufficient — the gene must also plausibly explain the phenotype.
-        #     A pair with NONE (or INCIDENTAL) on both variants gets no
+        #     A pair with NONE (or INCIDENTAL, or EXCLUDED) on both variants gets no
         #     phase-based rescue at all.
         for gene, idxs in recessive_gene_groups.items():
             for i in idxs:
                 if i in reasoning_failed or inclusion_decisions.get(i) != "EXCLUDE":
                     continue
-                if cluster_match_cache.get(i) in ("NONE", "INCIDENTAL"):
+                if cluster_match_cache.get(i) in ("NONE", "INCIDENTAL", "EXCLUDED"):
                     logger.info(
                         "[Pipeline] Second-triage override withheld: variant %d (%s) "
                         "has CLUSTER_PHENOTYPE: %s — compound-het/phase status "
@@ -1340,6 +1408,29 @@ class Pipeline:
             "[Pipeline] Second triage: %d included, %d excluded.",
             len(include_indices), len(exclude_indices),
         )
+
+        # ── Stage 3.2: Gene disease mechanism (included variants only) ─────────
+        #     PubMed + SLM lookup of the dominant-disease mechanism (LoF / GoF /
+        #     dominant negative), appended to the variant context for PVS1
+        #     (acmg_pvs1.validate_pvs1_mechanism) and the report's "Gene
+        #     mechanism" line. Never run for a variant that failed second
+        #     triage (phenotype check included). One lookup per gene.
+        mech_genes: dict[str, int] = {}
+        for i in include_indices:
+            mech_genes.setdefault(variants[i].get("Gene", "NA"), i)
+        mech_blocks: dict[str, str | None] = {}
+        with ThreadPoolExecutor(max_workers=max(1, min(MAX_WORKERS_LLM, len(mech_genes)))) as pool:
+            futures = {pool.submit(self._lof_mechanism.block_for, gene, context_slices[i], self._llm): gene
+                       for gene, i in mech_genes.items()}
+            for future in as_completed(futures):
+                try:
+                    mech_blocks[futures[future]] = future.result()
+                except Exception as exc:
+                    logger.warning("[Pipeline] Gene mechanism lookup failed for %s: %s", futures[future], exc)
+        for i in include_indices:
+            block = mech_blocks.get(variants[i].get("Gene", "NA"))
+            if block:
+                context_slices[i] = context_slices[i].rstrip() + "\n\n[LOF_MECHANISM]\n" + block + "\n"
 
         # ── Stage 3.5: Gene-level cross-analysis (included variants only) ──────
         gene_groups_included: dict[str, list[int]] = defaultdict(list)

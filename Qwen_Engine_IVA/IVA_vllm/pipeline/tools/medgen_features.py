@@ -10,6 +10,11 @@ a gene's condition list named an eponymous syndrome whose features include
 retinal degeneration, but nothing in the retrieved evidence said so, and the
 gene was excluded as "no link to visual impairment".
 
+Also gene_disease_inheritance(): the mode of inheritance of each MedGen
+disease concept the NCBI Gene record links to the gene (curated gene→disease
+links, not a name search) — one of the sources of the MOI decision in
+core/moi.py.
+
 Best effort: returns None on no match or any fetch failure — a missing
 feature list only means the overlap call judges that condition by its name.
 """
@@ -36,14 +41,23 @@ _NON_CONDITION_FRAGMENTS = {
 }
 
 _FEATURE_RE = re.compile(r"<ClinicalFeature[^>]*>\s*<Name>([^<]+)</Name>")
+_INHERITANCE_RE = re.compile(r"<ModeOfInheritance[^>]*>.*?<Name>([^<]+)</Name>", re.S)
 
 _cache: dict[str, tuple[str, list[str]] | None] = {}
 _lock = threading.Lock()
 
 
+# Stage 1b's answer when the evidence names no condition for the gene
+# (prompts/gene_phenotype_extraction.txt) — not a condition name.
+NO_CONDITION_ANSWER = "none established"
+
+
 def split_condition_list(phenotype_list: str) -> list[str]:
     """Condition names from Stage 1b's PHENOTYPE tag ("A, B, C" or "A; B")."""
-    if not phenotype_list or phenotype_list.strip().upper() == "NA":
+    if not phenotype_list:
+        return []
+    answer = phenotype_list.strip().strip("\"'*.").strip().lower()
+    if answer == "na" or answer.startswith(NO_CONDITION_ANSWER):
         return []
     sep = ";" if ";" in phenotype_list else ","
     names = []
@@ -100,4 +114,53 @@ def condition_features(name: str) -> tuple[str, list[str]] | None:
         return None  # not cached: a transient failure may succeed next time
     with _lock:
         _cache[key] = value
+    return value
+
+
+_gene_cache: dict[str, list[tuple[str, list[str]]]] = {}
+
+
+def _fetch_gene_diseases(gene: str) -> list[tuple[str, list[str]]]:
+    ids = _ncbi_get(
+        "esearch.fcgi",
+        {"db": "gene", "term": f"{gene}[sym] AND Homo sapiens[orgn]", "retmode": "json", "retmax": 1},
+        DEFAULT_TIMEOUT,
+    ).json().get("esearchresult", {}).get("idlist", [])
+    if not ids:
+        return []
+    linksets = _ncbi_get(
+        "elink.fcgi",
+        {"dbfrom": "gene", "db": "medgen", "id": ids[0], "linkname": "gene_medgen_diseases",
+         "retmode": "json"},
+        DEFAULT_TIMEOUT,
+    ).json().get("linksets", [])
+    uids = [u for ls in linksets[:1] for db in ls.get("linksetdbs", []) for u in db.get("links", [])]
+    if not uids:
+        return []
+    result = _ncbi_get(
+        "esummary.fcgi", {"db": "medgen", "id": ",".join(uids), "retmode": "json"},
+        DEFAULT_TIMEOUT,
+    ).json().get("result", {})
+    return [
+        (result[u].get("title", ""),
+         list(dict.fromkeys(_INHERITANCE_RE.findall(html.unescape(result[u].get("conceptmeta", ""))))))
+        for u in result.get("uids", [])
+    ]
+
+
+def gene_disease_inheritance(gene: str) -> list[tuple[str, list[str]]] | None:
+    """[(MedGen disease title, mode-of-inheritance names)] for every MedGen disease
+    concept linked to the gene's NCBI Gene record; [] if none; None on a fetch
+    failure (not cached, so a later call can retry)."""
+    key = gene.strip().upper()
+    with _lock:
+        if key in _gene_cache:
+            return _gene_cache[key]
+    try:
+        value = _fetch_gene_diseases(gene)
+    except Exception as e:
+        logger.warning("[MedGen] gene disease lookup failed for %s: %s", gene, e)
+        return None
+    with _lock:
+        _gene_cache[key] = value
     return value

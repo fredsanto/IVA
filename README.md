@@ -22,6 +22,8 @@ native install and for the Docker image.
   LitVar2, gnomAD, ClinGen, AutoPVS1, SpliceAI).
 - Optional: a free NCBI API key (`NCBI_API_KEY`) raises the NCBI rate limit
   from 3 to 10 requests/s.
+  NCBI counts requests per key, so servers sharing one key should each set
+  `NCBI_MAX_RPS` to their share (e.g. `NCBI_MAX_RPS=2.5` for 4 servers).
 
 ### Option A — native install (conda)
 

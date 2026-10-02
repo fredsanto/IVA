@@ -14,6 +14,8 @@
 #                           first run downloads ~18 GB of weights)
 #   HF_HOME                 Hugging Face cache for the model weights
 #   NCBI_API_KEY            NCBI E-utilities key (10 req/s instead of 3)
+#   NCBI_MAX_RPS            cap on NCBI requests/s for this server (default 10 with
+#                           a key, else 3); servers sharing one key split it
 set -euo pipefail
 cd "$(dirname "$0")"
 

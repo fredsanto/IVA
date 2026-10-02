@@ -90,10 +90,9 @@ _PROTEIN_CHANGE_RE = re.compile(r"p\.\(?([A-Za-z*]{1,3}\d+[A-Za-z*]{1,3}(?:fs\*?
 _CDNA_CHANGE_RE = re.compile(r"c\.[^\s:;()]+")
 
 NCBI_BASE    = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
-# Without API key: 3 req/s → 0.34 s delay.  With API key: 10 req/s → 0.11 s delay.
 # Set NCBI_API_KEY env var (free key from https://www.ncbi.nlm.nih.gov/account/).
+# Request rate is capped by the process-wide limiter in websearch.py (NCBI_MAX_RPS).
 NCBI_API_KEY = os.environ.get("NCBI_API_KEY", "")
-NCBI_DELAY   = 0.11 if NCBI_API_KEY else 0.34
 CGD_URL      = "https://research.nhgri.nih.gov/CGD/download/txt/CGD.txt.gz"
 CGD_MAX_CONDITIONS = 3        # cap OR terms from CGD to keep the query focused
 
@@ -111,22 +110,9 @@ SELECT_BATCH_SIZE = 10         # titles per relevance-scoring SLM call — a sin
                                 # number for every title instead of making one holistic
                                 # pick over the whole list.
 
-# Global rate limiter: serialises NCBI/LitVar2 request slots across all threads.
-# With 32 concurrent workers, per-thread sleep(0.34) would burst 32 requests at
-# once.  This lock + timestamp ensures at most 1 request every NCBI_DELAY seconds
-# globally, staying within NCBI's 3 req/s unauthenticated limit.
-_NCBI_RATE_LOCK      = threading.Lock()
-_NCBI_LAST_CALL_TIME = 0.0
-
-
-def _ncbi_rate_limit() -> None:
-    global _NCBI_LAST_CALL_TIME
-    with _NCBI_RATE_LOCK:
-        elapsed = time.time() - _NCBI_LAST_CALL_TIME
-        wait = NCBI_DELAY - elapsed
-        if wait > 0:
-            time.sleep(wait)
-        _NCBI_LAST_CALL_TIME = time.time()
+# NCBI/LitVar2 request slots share the process-wide limiter in websearch.py, so
+# every NCBI-calling tool together stays under one NCBI_MAX_RPS budget.
+from pipeline.tools.websearch import _ncbi_ws_rate_limit as _ncbi_rate_limit  # noqa: E402
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────

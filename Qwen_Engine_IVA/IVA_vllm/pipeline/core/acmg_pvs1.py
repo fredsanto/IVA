@@ -62,7 +62,7 @@ when lower (min of the two).
 
 import re
 
-from pipeline.core.acmg_points import adjust_points_line
+from pipeline.core.acmg_points import adjust_points_line, insert_criterion_line
 from pipeline.core.protein_change import PROTEIN_CHANGE_RE
 
 _PVS1_LINE_RE = re.compile(r"^-\s*PVS1\b.*$\n?", re.MULTILINE)
@@ -101,6 +101,10 @@ _GENE_LOF_PLP_RE = re.compile(r"P/LP nonsense/frameshift\s*:\s*(\d+)")
 _GNOMAD_PLI_RE   = re.compile(r"pLI = ([\d.]+)")
 _AUTOPVS1_PLI_RE = re.compile(r"pLI\s*:\s*([\d.]+)")
 _PLI_INTOLERANT  = 0.9
+
+# Recessive-gene NF4 override written by tools/autopvs1.py; its strength is
+# also on the block's "PVS1 strength" line, so the cap above already uses it.
+_AUTOPVS1_OVERRIDE_RE = re.compile(r"^\s*PVS1 override\s*:\s*(Strong|Moderate)\s*—\s*(.*)$", re.MULTILINE)
 _UNPROVEN_LOF_LABEL  = "Strong"
 _UNPROVEN_LOF_POINTS = 4.0
 
@@ -167,14 +171,32 @@ def validate_pvs1(conclusion_text: str, variant_context: str) -> str:
         variant in this situation gets PVS1 stripped.
 
     Whatever survives is then capped at Strong/+4 when the gene's LoF
-    mechanism is unproven (_lof_mechanism_unproven). No-op if PVS1 isn't in
-    the criteria list.
+    mechanism is unproven (_lof_mechanism_unproven). When the list has no
+    PVS1 and the AutoPVS1 block carries a recessive NF4 "PVS1 override"
+    (tools/autopvs1.py), PVS1 is added at that strength.
     """
     text = _enforce_autopvs1(conclusion_text, variant_context)
     m_tag = _PVS1_TAG_RE.search(text)
-    if m_tag is None or not _lof_mechanism_unproven(variant_context):
+    if m_tag is None:
+        return _add_override_pvs1(text, variant_context)
+    if not _lof_mechanism_unproven(variant_context):
         return text
     return _cap_pvs1(text, _UNPROVEN_LOF_LABEL, _UNPROVEN_LOF_POINTS, float(m_tag.group(2)))
+
+
+def _add_override_pvs1(conclusion_text: str, variant_context: str) -> str:
+    """Adds PVS1 at the recessive NF4 override strength when the model's list
+    has none."""
+    m = _AUTOPVS1_OVERRIDE_RE.search(variant_context)
+    if m is None:
+        return conclusion_text
+    label, points = m.group(1), _STRENGTH_POINTS[m.group(1)]
+    line = (f"- PVS1 [{label}, +{int(points)}]: Null variant — {m.group(2).strip()} "
+            "(AUTOPVS1 PVS1 override) [auto-added].\n")
+    text = insert_criterion_line(conclusion_text, line)
+    if text is None:
+        return conclusion_text
+    return adjust_points_line(text, points)
 
 
 def _enforce_autopvs1(conclusion_text: str, variant_context: str) -> str:
@@ -206,3 +228,122 @@ def _enforce_autopvs1(conclusion_text: str, variant_context: str) -> str:
 
     text = _PVS1_LINE_RE.sub("", conclusion_text, count=1)
     return adjust_points_line(text, delta=-original_points)
+
+
+# ── PVS1 vs. the gene's disease mechanism ─────────────────────────────────────
+# Three rules, each stated in a "**PVS1 mechanism note:**" line that is carried
+# into every MOI-layer block of the final report (acmg_points.splice_base_and_total):
+#   1. LOF MECHANISM VERDICT: NO_PVS1 (tools/lof_mechanism.py: the dominant
+#      disease is gain-of-function/dominant-negative, with a verified
+#      functional study) for a heterozygous LoF variant with no other variant
+#      in the gene -> PVS1 removed.
+# Every variant also gets a "**Gene mechanism:**" line (gene_mechanism_line):
+# gnomAD pLI/LOEUF, the ClinVar consequence split and the literature mechanism
+# with its reasoning — carried into the final report the same way.
+#   2. LoF variant in a gene whose ClinVar P/LP variants are missense-
+#      predominant (classify_consequence_counts) -> PVS1 at most Supporting.
+#   3. Missense variant in a nonsense/frameshift-predominant gene -> no PVS1;
+#      the note states that missense is not the established mechanism.
+
+PVS1_NOTE_LABEL = "**PVS1 mechanism note:**"
+GENE_MECHANISM_LABEL = "**Gene mechanism:**"
+_ZYGOSITY_RE = re.compile(r"Zygosity=([^,\n]*)")
+_PLI_RE = re.compile(r"pLI = ([\d.]+)")
+_LOEUF_RE = re.compile(r"LOEUF = ([\d.]+)")
+_MECH_REASONING_RE = re.compile(r"^Mechanism reasoning:\s*(.+)$", re.MULTILINE)
+_MECH_VERDICT_RE = re.compile(r"LOF MECHANISM VERDICT:\s*(NO_PVS1|NOT_ESTABLISHED)")
+_MECH_LINE_RE = re.compile(r"LOF MECHANISM \([^)]*\):\s*(\w+)")
+_MECH_EVIDENCE_RE = re.compile(r'^Mechanism evidence:\s*(.+)$', re.MULTILINE)
+_MECH_FUNCTIONAL_RE = re.compile(r'^Functional study:\s*(.+)$', re.MULTILINE)
+_CLINVAR_COUNTS_RE = re.compile(
+    r"P/LP missense variants\s*:\s*(\d+)\s*\n\s*P/LP nonsense/frameshift\s*:\s*(\d+)")
+_AUTOPVS1_TAG_RE = re.compile(r"^\s*Variant\s*:\s*\S+\s+\(([^)]*)\)", re.MULTILINE)
+_LOF_TAG_RE = re.compile(r"frameshift|nonsense|stop_?gain|splic|start_?lost|initiat", re.IGNORECASE)
+
+
+def _add_note(text: str, note: str) -> str:
+    return text.rstrip("\n") + f"\n{PVS1_NOTE_LABEL} {note}\n"
+
+
+def _variant_is_lof(variant_context: str) -> bool:
+    tag = _AUTOPVS1_TAG_RE.search(variant_context)
+    if tag:
+        return bool(_LOF_TAG_RE.search(tag.group(1)))
+    return _is_unambiguous_null_variant(variant_context)
+
+
+def validate_pvs1_mechanism(conclusion_text: str, variant_context: str, other_variant_in_gene: bool) -> str:
+    """
+    Applies the three mechanism rules above after validate_pvs1(). Stripping
+    or capping adjusts the stated points. other_variant_in_gene: the gene has
+    another included variant (cross-analysis ran) — rule 1 is then skipped,
+    since a second allele makes the recessive disease, not the dominant one,
+    the relevant model.
+    """
+    from pipeline.core.acmg_pp2_bp1 import _consequence_class
+    from pipeline.tools.clinvar_gene_stats import classify_consequence_counts
+
+    text = conclusion_text
+    m_tag = _PVS1_TAG_RE.search(text)
+
+    vm = _MECH_VERDICT_RE.search(variant_context)
+    zm = _ZYGOSITY_RE.search(variant_context)
+    heterozygous = bool(zm) and zm.group(1).strip().lower().startswith("het")
+    if (vm and vm.group(1) == "NO_PVS1" and not other_variant_in_gene and heterozygous
+            and _variant_is_lof(variant_context)):
+        mech = (_MECH_LINE_RE.search(variant_context) or [None, "gain-of-function/dominant-negative"])[1]
+        if m_tag:
+            text = _PVS1_LINE_RE.sub("", text, count=1)
+            text = adjust_points_line(text, delta=-float(m_tag.group(2)))
+        return _add_note(text, (
+            f"PVS1 not applied — the gene's dominant disease mechanism is {mech.lower().replace('_', ' ')}, "
+            "not loss of function, shown by a functional study (quotes in Gene mechanism below); "
+            "a heterozygous null allele is not pathogenic by this mechanism."))
+
+    cm = _CLINVAR_COUNTS_RE.search(variant_context)
+    if not cm:
+        return text
+    missense, truncating = int(cm.group(1)), int(cm.group(2))
+    verdict = classify_consequence_counts(missense, truncating)
+    counts = f"ClinVar P/LP: {missense} missense / {truncating} nonsense/frameshift"
+
+    if verdict == "missense-predominant" and _variant_is_lof(variant_context):
+        if m_tag and float(m_tag.group(2)) > _STRENGTH_POINTS["Supporting"]:
+            text = _cap_pvs1(text, "Supporting", _STRENGTH_POINTS["Supporting"], float(m_tag.group(2)))
+            return _add_note(text, f"PVS1 capped at Supporting — {counts}: loss of function is not an "
+                                   "established disease mechanism for this gene.")
+        return text
+
+    if verdict == "nonsense/frameshift-predominant":
+        type_m = _TYPE_RE.search(variant_context)
+        hgvs_m = _HGVS_RE.search(variant_context)
+        if _consequence_class(type_m.group(1) if type_m else "", hgvs_m.group(1) if hgvs_m else "") == "missense":
+            return _add_note(text, f"No PVS1 — missense variant in a gene where {counts}: loss of function "
+                                   "is the established disease mechanism, missense is not.")
+    return text
+
+
+def gene_mechanism_line(conclusion_text: str, variant_context: str) -> str:
+    """Appends the "**Gene mechanism:**" line: gnomAD pLI/LOEUF, ClinVar P/LP
+    missense vs nonsense/frameshift split, literature mechanism (verified
+    quotes only) and the mechanism reasoning from tools/lof_mechanism.py.
+    Informational: no criterion or point changes here."""
+    pli, loeuf = _PLI_RE.search(variant_context), _LOEUF_RE.search(variant_context)
+    parts = [f"gnomAD pLI = {pli.group(1) if pli else 'unavailable'}, "
+             f"LOEUF = {loeuf.group(1) if loeuf else 'unavailable'}"]
+    cm = _CLINVAR_COUNTS_RE.search(variant_context)
+    if cm:
+        parts.append(f"ClinVar P/LP: {cm.group(1)} missense / {cm.group(2)} nonsense/frameshift")
+    mm = _MECH_LINE_RE.search(variant_context)
+    if mm:
+        mech = f"literature mechanism of the dominant disease: {mm.group(1).lower().replace('_', ' ')}"
+        ev, fs = _MECH_EVIDENCE_RE.search(variant_context), _MECH_FUNCTIONAL_RE.search(variant_context)
+        if ev:
+            mech += f" — {ev.group(1)}"
+        if fs:
+            mech += f"; functional study: {fs.group(1)}"
+        parts.append(mech)
+    rm = _MECH_REASONING_RE.search(variant_context)
+    if rm and rm.group(1).strip() not in ("", "NONE"):
+        parts.append(f"reasoning: {rm.group(1).strip()}")
+    return conclusion_text.rstrip("\n") + f"\n{GENE_MECHANISM_LABEL} " + "; ".join(parts) + "\n"

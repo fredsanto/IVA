@@ -33,7 +33,8 @@ from pipeline.core.acmg_pm1 import validate_pm1
 from pipeline.core.acmg_pm2 import validate_pm2
 from pipeline.core.acmg_bp6 import validate_bp6
 from pipeline.core.acmg_pp4 import validate_pp4, validate_pp4_full_coverage
-from pipeline.core.acmg_pvs1 import validate_pvs1
+from pipeline.core.acmg_pvs1 import validate_pvs1, validate_pvs1_mechanism, gene_mechanism_line
+from pipeline.core.acmg_pm4 import validate_pm4
 from pipeline.core.acmg_points import relabel_all_points_lines, recompute_and_fix_totals
 
 if TYPE_CHECKING:
@@ -44,6 +45,7 @@ logger = logging.getLogger(__name__)
 _PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "conclusion.txt"
 
 MAX_NEW_TOKENS_REPORT = 1500
+CONCLUSION_RETRY_REPETITION_PENALTY = 1.1   # retry only, after a response without an ACMG criteria section
 
 # Scoped to the Gene=/HGVS= fields of variant_context specifically (the
 # key=value line retrieval.py's _variant_dict_to_str builds from the input
@@ -202,11 +204,18 @@ def run_one(
         .replace("{reasoning_output}", reasoning)
         .replace("{cross_analysis_block}", cross_analysis_block))
 
-    result = llm.generate(
-        system="You are an expert clinical geneticist. Limit your response to 1000 words maximum.",
-        user=user_prompt,
-        max_tokens=MAX_NEW_TOKENS_REPORT,
-    )
+    system = "You are an expert clinical geneticist. Limit your response to 1000 words maximum."
+    result = llm.generate(system=system, user=user_prompt, max_tokens=MAX_NEW_TOKENS_REPORT)
+    if not _has_acmg_criteria_section(result):
+        # Greedy decoding can fall into a repetition loop (e.g. "000000…" to the
+        # token limit), and at temperature 0 a plain retry repeats it exactly —
+        # retry once with a repetition penalty.
+        logger.warning(
+            "[Conclusion] Response missing 'ACMG criteria' section (ended with %r) — "
+            "retrying with repetition penalty", result[-80:],
+        )
+        result = llm.generate(system=system, user=user_prompt, max_tokens=MAX_NEW_TOKENS_REPORT,
+                              repetition_penalty=CONCLUSION_RETRY_REPETITION_PENALTY)
     if not _has_acmg_criteria_section(result):
         raise SLMError(
             "Conclusion response missing required 'ACMG criteria' section "
@@ -240,6 +249,10 @@ def run_one(
     # own prose in `result` claims about phenotype fit.
     result = validate_pp4_full_coverage(result, reasoning)
     result = validate_pvs1(result, variant_context)
+    result = validate_pvs1_mechanism(result, variant_context, other_variant_in_gene=bool(cross_analysis))
+    result = gene_mechanism_line(result, variant_context)
+    # PM4 after PVS1: never stacks on a PVS1 that survived validation.
+    result = validate_pm4(result, variant_context)
     # PS3 never stacks on PVS1 (functional loss is what PVS1 already scores).
     result = block_ps3_under_pvs1(result)
     # Unconditional final pass: the validators above only adjust the stated

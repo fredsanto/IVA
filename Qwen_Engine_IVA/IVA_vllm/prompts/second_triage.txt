@@ -20,9 +20,13 @@ INCLUDE requires evidence for BOTH:
    patient's phenotype:
 
    HARD GATE — CLUSTER_PHENOTYPE ALONE DECIDES THIS CRITERION, NOT YOUR OWN
-   READING OF THE PHENOTYPE PROSE. The verdict is one of five tokens — YES,
-   PARTIAL, NONE, INCIDENTAL, or UNKNOWN — never "NO" (not a valid token; if
-   you find yourself writing "NO" for this gate, you mean NONE below):
+   READING OF THE PHENOTYPE PROSE. The verdict is one of six tokens — YES,
+   PARTIAL, NONE, INCIDENTAL, EXCLUDED, or UNKNOWN — never "NO" (not a valid
+   token; if you find yourself writing "NO" for this gate, you mean NONE below):
+     CLUSTER_PHENOTYPE = EXCLUDED -> EXCLUDE. The patient phenotype states
+       findings the patient does NOT have, and the gene's patient-relevant
+       conditions carry one of them as a core feature. Name the excluded
+       finding and the condition carrying it in Exclude-case.
      CLUSTER_PHENOTYPE = YES or PARTIAL -> criterion 1 is SATISFIED for THIS
        patient, full stop. INCLUDE gets this criterion for free; EXCLUDE may
        NEVER be justified on phenotype grounds when this is the verdict.

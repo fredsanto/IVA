@@ -712,6 +712,10 @@ def _build_normalized_df(df: pd.DataFrame, df_original: pd.DataFrame) -> pd.Data
         else:
             out[col] = "NA"
 
+    # ClinVar_class is never taken from the upload (annotation snapshots go
+    # stale); ClinVarGeneStatsTool fills it from the live ClinVar record.
+    out["ClinVar_class"] = "NA"
+
     # Fill HGVS from AAChange if needed
     if (out["HGVS"] == "NA").all():
         aa_col = next(
@@ -971,6 +975,10 @@ def normalize_upload(
         raise ValueError("File contains no data rows.")
 
     # ── Normalize ─────────────────────────────────────────────────────────────
+    # InterVar columns are never used: InterVar is an automated ACMG call, and
+    # the header mapper read it as ClinVar_class in ~half of the uploads.
+    df = df.drop(columns=[c for c in df.columns if "intervar" in str(c).lower()])
+
     df_original = df.copy()          # preserve original before column mapping
 
     df, header_mapping_summary = _map_columns_llm(df, llm)

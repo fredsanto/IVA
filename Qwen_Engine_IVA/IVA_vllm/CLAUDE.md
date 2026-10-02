@@ -78,9 +78,10 @@ variant-pipeline/
 │   │   ├── clinvar_gene_stats.py    ← ClinVar gene-level P/LP missense vs. nonsense/frameshift counts
 │   │   ├── clingen_allele.py        ← ClinGen Allele Registry variant resolution (CAid, cross-refs)
 │   │   ├── genereviews.py           ← GeneReviews clinical-description fetch (NCBI Bookshelf) — gene-scoped, class-cached
-│   │   ├── websearch.py             ← WebSearchTool + WebFetchTool (sub-tools for ReAct agent)
-│   │   ├── websearch_agent.py       ← WebSearchAgentTool: full ReAct web-search loop
-│   │   └── ncbi.py                  ← NCBIFetchTool (sub-tool for ReAct agent)
+│   │   ├── repeat_region.py         ← UCSC repeat-region check for in-frame indels (PM4 grounding)
+│   │   ├── websearch.py             ← shared NCBI E-utilities helpers (_ncbi_get, rate limiter)
+│   │   ├── websearch_agent.py       ← WebSearchAgentTool: PubMed + bioRxiv/medRxiv (Crossref) search for genes with no curated entry
+│   │   └── ncbi.py                  ← NCBIFetchTool (ClinVar/PubMed fetch helper)
 │   │
 │   └── manifests/
 │       ├── litvar2.yaml
@@ -93,7 +94,6 @@ variant-pipeline/
 │       └── websearch_agent.yaml
 │
 └── prompts/
-    ├── retrieval.txt
     ├── compression.txt
     ├── first_triage.txt
     ├── reasoning.txt
@@ -127,7 +127,7 @@ Unknown columns are ignored. Missing columns are filled with `"NA"`.
 | `OMIM_phenotype` | str | `Gitelman syndrome` | Associated OMIM disease name |
 | `OMIM_inheritance` | str | `Autosomal recessive` | Full inheritance string |
 | `Inheritance` | str | `AR` | Short code: AR, AD, XL, … |
-| `ClinVar_class` | str | `Pathogenic` | ClinVar clinical significance |
+| `ClinVar_class` | str | `Pathogenic` | Never read from the upload: filled by `clinvar_gene_stats` from the live ClinVar record's aggregate classification, else `NA`. InterVar columns are dropped at ingestion |
 | `Allelic_balance` | float | `0.5393` | VAF / allele balance |
 | `Frequency` | float | `1.19E-05` | Population allele frequency (gnomAD) |
 | `CADD_score` | float | `26` | CADD PHRED score |
@@ -240,7 +240,7 @@ request payload — the two are equivalent but use different APIs.
 | `Tool` | Pure deterministic logic, no network, no SLM |
 | `NetworkTool` | HTTP fetch, no SLM |
 | `SLMTool` | Calls the SLM for summarization, filtering, or judgment |
-| `ReActTool` | Full ReAct loop with tool registry (current websearch agent) |
+| `ReActTool` | Full ReAct loop with tool registry (no current implementation) |
 | `RAGTool` | Vector DB retrieval (interface ready, implementation pluggable) |
 | `BotTool` | Browser automation (interface ready, Playwright/Selenium pluggable) |
 
@@ -405,11 +405,13 @@ note the missing evidence in the report rather than reasoning from a gap.
 | `litvar2_summary` | `SLMTool` | 1 (parallel) | RS_ID valid **or** Gene present (Python gate) |
 | `spliceai` | `NetworkTool` | 1 (parallel) | Python gate — skips synonymous, intergenic, UTR, unresolvable coords |
 | `gnomad_constraint` | `NetworkTool` | 1 (parallel) | Gene present (manifest gate) |
-| `clinvar_gene_stats` | `NetworkTool` | 1 (parallel) | Gene present (manifest gate) |
+| `clinvar_gene_stats` | `NetworkTool` | 3 (parallel) | Gene present (manifest gate); writes the live ClinVar aggregate classification into `ClinVar_class` |
 | `clingen_allele` | `NetworkTool` | 1 (parallel) | Python gate — a usable query can be built (transcript+cDNA, clean HGVS, or genomic SNV coordinates) |
 | `genereviews` | `NetworkTool` | 1 (parallel) | Gene present (manifest gate) |
 | `autopvs1` | `NetworkTool` | 2 (parallel) | Python gate — LoF/frameshift/splice variants only |
-| `websearch_agent` | `ReActTool` | 3 (serial) | No gate — always runs; the ReAct agent's own pre-loop checkpoint (sees prior tool outputs + full variant record, including ClinVar_class/Frequency) decides whether search is needed |
+| `repeat_region` | `NetworkTool` | 3 (parallel) | No gate — `run()` acts only on stop-loss Types and AutoPVS1 `Inframe_deletion`/`Inframe_insertion` variants; UCSC simpleRepeat + RepeatMasker (Simple_repeat/Low_complexity) overlap → "PM4 REPEAT CHECK: MET/NOT MET", read by `core/acmg_pm4.py` (PM4 +2, never with PVS1) |
+| `lof_mechanism` | helper (not a manifest tool) | after second triage | Called from `pipeline.py` only for variants that passed second triage (phenotype check included) — never for genes that failed it; cached per gene; block appended to the variant context before cross-analysis/conclusion; PubMed mechanism abstracts + MedGen dominant conditions + gnomAD pLI/LOEUF + ClinVar consequence split → one SLM call (`prompts/lof_mechanism.txt`) for the dominant-disease mechanism and a functional study, both quotes checked against the cited abstract; `LOF MECHANISM VERDICT: NO_PVS1` only for gain-of-function/dominant-negative with a verified functional study. Read by `core/acmg_pvs1.validate_pvs1_mechanism`, which also caps PVS1 at Supporting for LoF variants in ClinVar missense-predominant genes and notes "no PVS1" for missense in nonsense/frameshift-predominant genes; `NO_PVS1` is applied only to a heterozygous LoF variant with no other variant in the gene. Every variant gets a `**Gene mechanism:**` line (pLI, LOEUF, ClinVar split, verified mechanism quotes, SLM mechanism reasoning with PMIDs restricted to the abstracts); it and the `**PVS1 mechanism note:**` line are carried into the MOI-layer blocks of the final report |
+| `websearch_agent` | `SLMTool` | 4 (serial) | No manifest gate — `run()` searches literature only when GeneReviews, OMIM phenotype, MedGen and CGD are all empty for the gene; ClinVar submission-level check for P/LP variants always |
 
 **`litvar2_summary`** runs a gene-first three-track search:
 
@@ -419,7 +421,7 @@ note the missing evidence in the report rather than reasoning from a gap.
 
 All tracks that yield evidence are combined in the output separated by `---`. `_disease_query` is resolved once per pipeline run via a single SLM call (`_resolve_disease_query`), cached as an instance attribute, and reused for all variants. The resolver returns 2–4 PubMed-compatible disease terms as a PubMed OR expression, preferring MeSH-indexed terms for broad recall.
 
-**`autopvs1`** uses a HGVS-first query strategy: when a valid transcript HGVS is available (`NM_xxx:c.xxx`), it queries AutoPVS1 via `/search?q={hgvs}` so AutoPVS1 resolves coordinates internally — immune to stale CSV coords. Falls back to VCF-style coords (`/variant/{build}/{chrom}-{pos}-{ref}-{alt}`) when HGVS is absent or the search path fails. Results are discarded when AutoPVS1 returns `variant_type="Intergenic"` or the returned gene does not match the expected gene. `pvs1_applicable` is `True` only when a flowchart is present in the response and no "incompatible with recommendations" message is found.
+**`autopvs1`** uses a HGVS-first query strategy: when a valid transcript HGVS is available (`NM_xxx:c.xxx`), it queries AutoPVS1 via `/search?q={hgvs}` so AutoPVS1 resolves coordinates internally — immune to stale CSV coords. Falls back to VCF-style coords (`/variant/{build}/{chrom}-{pos}-{ref}-{alt}`) when HGVS is absent or the search path fails. Results are discarded when AutoPVS1 returns `variant_type="Intergenic"` or the returned gene does not match the expected gene. `pvs1_applicable` is `True` only when a flowchart is present in the response and no "incompatible with recommendations" message is found. Recessive-gene override: on the NF4 path, when AutoPVS1 stopped at Unmet only because the exon's LoF population frequency exceeds its own 0.1% threshold, and the variant's Inheritance (or AutoPVS1's disease table) includes AR, the tool computes the share of protein removed (truncation residue from pHGVS, NP_ length from NCBI) and reports `PVS1 strength: Strong` (>10%) or `Moderate`, with a `PVS1 override` line; `core/acmg_pvs1.py` adds PVS1 at that strength if the model's list has none.
 
 **`spliceai`** queries the Broad Institute SpliceAI API and returns delta scores
 (DS_AG, DS_AL, DS_DG, DS_DL) for acceptor/donor gain and loss, along with the
@@ -432,7 +434,10 @@ manifest gate additionally skips the API call when the canonical `SpliceAI_score
 field is already populated — i.e. the SLM header-interpretation step (see
 `core/normalizer.py`) recognized a precomputed SpliceAI column in the input,
 regardless of its raw name (`SpliceAI_v13`, `spliceai_concat`, or any other
-annotation-tool naming). Compound annotation strings bundling multiple
+annotation-tool naming). When the input header has a SpliceAI column but this
+variant's value is empty, `run()` reports "No significant score from SpliceAI"
+without calling the API (the annotation already covered the variant; the public
+API bans the caller's IP on the first 429). Compound annotation strings bundling multiple
 delta/position values (e.g. ANNOVAR-style pipe-delimited output) are collapsed
 to a single max delta score by `_parse_spliceai_value()` based on the value's
 shape, not the column's name. Output labels are enriched for SLM readability
@@ -464,9 +469,11 @@ than as a blank result.
 
 **`genereviews`** fetches the gene's canonical GeneReviews chapter(s) directly from
 NCBI Bookshelf (`esearch` gene symbol → gene ID, `elink` gene→books, `esummary` to
-resolve chapter accessions, then a plain page fetch + `Clinical Description` /
-`Clinical Characteristics` / `Suggestive Findings` section extraction) and returns
-that curated phenotype text verbatim. Gene-scoped, class-cached like
+resolve chapter accessions, then the chapters' own PubMed records via
+`NBKxxxx[aid]` esearch + efetch) and returns each chapter's structured summary
+verbatim — the `CLINICAL CHARACTERISTICS`, `DIAGNOSIS/TESTING` and `GENETIC COUNSELING`
+(mode of inheritance) abstract sections. The Bookshelf chapter page is not fetched:
+it answers scripted requests with a CAPTCHA page. Gene-scoped, class-cached like
 `gnomad_constraint`. Exists because `litvar2_summary`'s Track 1 sorts by `pub_date`
 to surface newly-characterized gene-disease links (see its own note above) — for a
 gene with a large, unrelated publication volume (e.g. a common cancer gene that also
@@ -481,19 +488,29 @@ Syndrome chapter explicitly lists "developmental delay/intellectual disability" 
 explicit "no chapter found" message rather than `None`, consistent with the
 "errors are informative, not silent" rule.
 
-**`websearch_agent`** runs a ReAct loop with three sub-tools (WebSearchTool,
-WebFetchTool, NCBIFetchTool). No gate — always runs. Before starting the loop, a
-pre-loop checkpoint prompt receives all pre-fetched evidence from earlier tools
-(LitVar2, AutoPVS1, SpliceAI, gnomAD constraint, ClinVar gene stats, ClinGen allele,
-GeneReviews) plus the full variant record (including `ClinVar_class`/`Frequency`)
-and decides whether any primary gaps remain (OMIM, ClinVar details, functional data,
-recent case reports — GeneReviews itself is now pre-fetched, so the agent should not
-need to re-search for it) or whether the variant needs search at all — this replaced
-an earlier Python `gate()` that hard-skipped ClinVar benign/likely-benign and common
-(AF > 1%) variants before the checkpoint ever ran; that decision now lives entirely
-in the checkpoint's own judgment, which has full visibility into those same fields.
-The loop runs up to `max_steps=4` iterations; after each observation a mid-loop
-checkpoint decides whether to continue or stop.
+**`websearch_agent`** covers genes that are published as disease genes but not yet in
+any curated source. For each gene it first checks the curated sources: `OMIM_phenotype`
+(variant field), GeneReviews (chapter existence from E-utilities metadata — the
+Bookshelf chapter page itself returns a CAPTCHA to scripts), MedGen (NCBI
+gene→medgen `gene_medgen_diseases` link) and CGD (`litvar2_summary`'s CGD table). If any
+of them holds a disease entry, no literature search runs. If all are empty, it searches
+PubMed (E-utilities) for journal articles and Crossref (`member:54368`, openRxiv — the
+publisher of bioRxiv and medRxiv, `type:posted-content`) for preprints, with the gene and
+a generic disease vocabulary in title/abstract only, newest first (20 records per
+source). Crossref's query also matches non-title fields, so preprints are kept only
+when the gene symbol and a disease term appear in their own title/abstract. If Crossref
+fails, the PubMed part is kept (header says so) and the block is not cached. It
+drops preprints whose published version is already in the pool,
+scores titles with the SLM and summarises the selected abstracts (the same
+`_select_relevant_pmids` / `_summarise` steps as `litvar2_summary`'s condition inventory).
+The patient phenotype is never used, because this block also feeds Stage 1b
+gene-phenotype extraction. A clean negative is reported explicitly. Curated-source state
+and the literature block are cached per gene. Independently, for P/LP `ClinVar_class`
+variants it appends the forced ClinVar submission-level check (per-submitter tally,
+rationale, cited PMIDs). No general web search engine is used: bioRxiv's own site sits
+behind a Cloudflare bot challenge, and Brave/DuckDuckGo (via `ddgs`) were rate-limited or
+timed out on nearly every production query. Europe PMC's REST API was dropped after it
+returned 503 for every request during a test run.
 
 ---
 
@@ -557,7 +574,8 @@ Thread-safety requirements:
 - `LitVar2SummaryTool._disease_query` and `_cgd_table` are initialized with
   double-checked locking (`threading.Lock()`).
 - `WebSearchAgentTool._last_trace` uses `threading.local()` to avoid cross-thread
-  contamination.
+  contamination; its per-gene curated-source and literature caches are class-level
+  dicts written under a lock.
 
 GPU KV cache math for the A100 40 GB (Qwen3.5-9B bfloat16):
 - Model weights: ~18 GB → KV cache pool: ~18 GB (at `--gpu-memory-utilization 0.90`)
@@ -597,7 +615,7 @@ can be discarded with high confidence given the patient phenotype.
 Prompt loaded from `prompts/first_triage.txt`.
 
 Only runs when `n > TRIAGE_ENABLED_THRESHOLD` (configured in `pipeline/config.py`;
-current value: 12). When skipped, all variants are implicitly KEEP.
+current value: 0, i.e. always runs). When skipped, all variants are implicitly KEEP.
 
 Compound heterozygous candidates (two or more variants in the same gene) are
 automatically exempted from DISCARD — a DISCARD decision on any such variant is
@@ -744,6 +762,14 @@ python batch.py "$JOBS_FOLDER" --backend vllm
 `--enable-prefix-caching` — reuses KV cache for shared prompt prefixes across requests.
 Startup polling uses 60 attempts × 5 s = 5 minutes; Qwen3.5's hybrid Mamba
 architecture needs this much time on first load.
+
+### NCBI API key
+
+An NCBI API key is already configured for this deployment: it lives in
+`~/.ncbi_api_key` and `launch_qwen.sh` exports it as `NCBI_API_KEY` (10 req/s
+instead of 3). It is NOT exported in an interactive shell — a standalone script
+that imports pipeline tools (simulations, re-checks) must load it itself:
+`export NCBI_API_KEY="$(cat ~/.ncbi_api_key)"`. Never print or commit the key.
 
 ### Local / dev
 
@@ -968,7 +994,6 @@ vllm            # production inference (A100 node)
 ```
 requests
 beautifulsoup4
-ddgs            # DuckDuckGo search (was duckduckgo-search)
 pandas
 openpyxl        # Excel support in normalizer
 ```

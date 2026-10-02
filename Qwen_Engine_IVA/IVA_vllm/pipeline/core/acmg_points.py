@@ -697,6 +697,7 @@ _MOI_DELTA_LINE_RE = re.compile(
 _MODEL_BASE_BLOCK_RE = re.compile(
     r"(?m)^\*\*Base ACMG criteria\b[^\n]*\n(?:[ \t]*(?:[-•]|\*[ \t]|\[repeat)[^\n]*\n?)*"
 )
+_PVS1_NOTE_RE = re.compile(r"(?m)^\*\*(?:PVS1 mechanism note|Gene mechanism):\*\*[^\n]*")
 _MODEL_BASE_POINTS_RE = re.compile(r"(?m)^\*\*Base ACMG points:\*\*[^\n]*\n?")
 _MODEL_TOTAL_RE = re.compile(r"(?m)^\*\*Total ACMG points:\*\*[^\n]*\n?")
 
@@ -718,6 +719,13 @@ def splice_base_and_total(section: str, base_conclusion: str) -> str:
         logger.warning("acmg_points.splice_base_and_total: no ACMG block in base conclusion — base block not spliced.")
         return section
     base_block, _ = extracted
+    # The Stage-4 "PVS1 mechanism note" and "Gene mechanism" lines
+    # (acmg_pvs1.validate_pvs1_mechanism / gene_mechanism_line) travel with the
+    # base criteria so the final report states the gene's constraint and
+    # mechanism, and why PVS1 was removed, capped or not applicable.
+    notes = _PVS1_NOTE_RE.findall(base_conclusion)
+    if notes:
+        base_block += "\n" + "\n".join(notes)
 
     original = section
     section = _MODEL_BASE_BLOCK_RE.sub("", section)

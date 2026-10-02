@@ -33,9 +33,9 @@ Specifically check for:
   [GENE] ([HGVS]) string against that exact variant's own layer/base block
   header line above, character for character (chromosome/position/ref/alt,
   transcript, cDNA change, and protein change all included). A real past
-  failure: the source block's own header read "c.100G>A:p.W34X"
-  (nonsense/stop-gain — the same block's PVS1 justification explicitly cites
-  NMD) and the draft wrote "c.100G>A; p.Glu34Lys" — a fabricated missense
+  failure: the source block's own header named a nonsense/stop-gain
+  change (the same block's PVS1 justification explicitly cites NMD) and the
+  draft wrote the same cDNA position with a missense protein change — a fabricated
   change contradicting the block's own PVS1 reasoning two sentences later. Any
   character-level mismatch in the HGVS/protein notation, however minor it
   looks (one amino acid, one digit, one nucleotide), is a HARD ERROR — replace
@@ -66,8 +66,9 @@ Specifically check for:
 - ALLELIC-BALANCE ARTIFACT/MOSAICISM CAVEAT CHECK (mandatory, do this for
   every variant in section 2): re-read that variant's own layer/base block
   Comment for any call-quality caveat about anomalously low or otherwise
-  inconsistent allelic balance (e.g. "AB=0.09 is well below the expected ~0.5
-  ... more consistent with a sequencing artifact or low-level mosaicism"). If
+  inconsistent allelic balance (a statement that the allelic balance (AB) is far
+  below the ~0.5 expected for a genuine het call and more consistent with a sequencing
+  artifact or low-level mosaicism). If
   such a caveat exists in the source block but is absent from the draft's
   section 2 paragraph for that variant, add it back verbatim in substance —
   do not let a high ACMG classification (Likely Pathogenic/Pathogenic) stand

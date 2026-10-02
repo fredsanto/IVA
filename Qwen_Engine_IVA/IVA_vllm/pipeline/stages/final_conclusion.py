@@ -489,7 +489,7 @@ def _reconcile_missing_causative(
 # ── Deterministic last-resort fallback ──────────────────────────────────────
 #
 # Used only when the LLM fails to produce a well-formed "# Clinical
-# Conclusion" even after one retry (see run() below) — e.g. the SPATA13/
+# Conclusion" even after one retry (see run() below) — e.g. the borderline-variant/
 # arithmetic-rambling failure this module's docstring-level comments already
 # describe, where the model burns its entire token budget re-litigating a
 # single variant and never reaches the actual conclusion. Rather than ship a
@@ -541,8 +541,16 @@ _BLOCK_APPLIED_RE   = re.compile(r"^\*\*[^*\n]*criteria applied:\*\*[ \t]*\S")
 _BLOCK_DELTA_RE     = re.compile(r"^\*\*[^*\n]*delta:\*\*")
 
 _CONCLUSION_SECTION_RE = re.compile(r"^[ \t#*]*([1-9])\)")
-# A point value the model put on a finding line itself, e.g. "— 5 pts,".
-_INLINE_POINTS_RE = re.compile(r"[ \t]*[—-]?[ \t]*\[?[-+]?\d+(?:\.\d+)?\]?[ \t]*pts?\b(?:[ \t]+total)?[ \t]*,?")
+# A point value the model put on a finding line itself, e.g. "— 5 pts," or
+# "with a total ACMG score of 5 points,". "points" must match too: the old
+# "pts?" form let a model-invented total through next to the code-copied one.
+# A threshold ("≥6 points") or a number glued to a code ("PM3 points") is kept.
+_INLINE_POINTS_RE = re.compile(
+    r"(?:[ \t]+(?:with|has|of)?[ \t]*(?:a[ \t]+)?(?:total[ \t]+)?(?:ACMG[ \t]+)?(?:score|total)[ \t]+of)?"
+    r"[ \t]*[—-]?[ \t]*\[?(?<![>≥<≤=][ \t])(?<![>≥<≤=\w.])[-+]?\d+(?:\.\d+)?\]?[ \t]*(?:points?|pts?)\b"
+    r"(?:[ \t]+total)?[ \t]*,?",
+    re.IGNORECASE,
+)
 _CDNA_RE = re.compile(r"c\.[^\s:;|(),]+")
 
 
@@ -600,16 +608,25 @@ def _block_acmg_entries(
     return entries
 
 
-def _render_block_acmg(gene: str, finding_line: str, entries: list[dict]) -> list[str]:
-    """The criteria + classification lines for one finding, copied from the
-    matching layer block. The finding line's own cDNA picks the variant when
-    the gene has several; the same variant scored in several layers takes a
-    CAUSATIVE compound-het pair block first, then the highest total."""
+def _match_block_entry(gene: str, finding_line: str, entries: list[dict]) -> dict | None:
+    """The layer-block entry for one finding line, or None when it does not
+    match exactly one variant. The finding line's own cDNA picks the variant
+    when the gene has several; the same variant scored in several layers
+    takes a CAUSATIVE compound-het pair block first, then the highest total."""
     cands = [e for e in entries if e["gene"] == gene]
     line_cdnas = set(_CDNA_RE.findall(finding_line))
     if line_cdnas:
         cands = [e for e in cands if e["cdnas"] & line_cdnas]
     if not cands or len({e["cdnas"] for e in cands}) > 1:
+        return None
+    return max(cands, key=lambda e: (e["causative_pair"], e["points"]))
+
+
+def _render_block_acmg(gene: str, finding_line: str, entries: list[dict]) -> list[str]:
+    """The criteria + classification lines for one finding, copied from the
+    matching layer block (see _match_block_entry)."""
+    best = _match_block_entry(gene, finding_line, entries)
+    if best is None:
         logger.warning(
             "[FinalConclusion] No unique layer block for finding line %r — ACMG criteria not inserted.",
             finding_line.strip(),
@@ -618,7 +635,6 @@ def _render_block_acmg(gene: str, finding_line: str, entries: list[dict]) -> lis
             "**ACMG criteria:** not inserted — this finding could not be matched "
             "to exactly one variant's layer block; see the MOI-layer blocks above."
         ]
-    best = max(cands, key=lambda e: (e["causative_pair"], e["points"]))
     return (
         [f"**ACMG criteria ({best['layer']} layer block):**"]
         + best["lines"]
@@ -652,6 +668,12 @@ def _insert_block_acmg(
     in_conclusion = False
     section: str | None = None
     pending: tuple[str, str] | None = None
+    # Section 4 is VUS with a block total in [4, 6) only. The model picks the
+    # entries from its own reading of the totals and has listed a 3-point
+    # variant as "5.5 points"; an entry whose block total is out of range is
+    # dropped with its prose, by the block's number, not the model's.
+    skipping = False
+    kept_vus = dropped_vus = 0
 
     def _flush() -> None:
         nonlocal pending
@@ -670,6 +692,9 @@ def _insert_block_acmg(
         sm = _CONCLUSION_SECTION_RE.match(line) if in_conclusion else None
         if sm:
             _flush()
+            skipping = False
+            if section == "4" and dropped_vus and not kept_vus:
+                out.extend(["None identified.", ""])
             section = sm.group(1)
             out.append(line)
             continue
@@ -679,10 +704,26 @@ def _insert_block_acmg(
             fm = finding_re.match(line) if finding_re else None
             if fm and "pts total →" not in line:
                 _flush()
+                skipping = False
+                if section == "4":
+                    best = _match_block_entry(fm.group(1), line, entries)
+                    if best is not None and not (4 <= best["points"] < 6):
+                        logger.warning(
+                            "[FinalConclusion] Section 4 entry %r dropped: block total %s is outside [4, 6).",
+                            line.strip()[:120], _fmt_points(best["points"]),
+                        )
+                        skipping = True
+                        dropped_vus += 1
+                        continue
+                    kept_vus += 1
                 line = re.sub(r"(?<=\S)[ \t]{2,}", " ", _INLINE_POINTS_RE.sub(" ", line)).rstrip()
                 pending = (fm.group(1), line)
+            elif skipping and line.strip():
+                continue
         out.append(line)
     _flush()
+    if section == "4" and dropped_vus and not kept_vus:
+        out.append("None identified.")
     return "\n".join(out)
 
 
@@ -891,7 +932,7 @@ def run(
     def _recover_from_malformed_draft() -> str:
         """
         Both draft and revised failed _is_well_formed() — a real recurring
-        failure (see clinical_conclusion.txt's SPATA13/arithmetic-rambling
+        failure (see clinical_conclusion.txt's borderline-variant/arithmetic-rambling
         notes): the model burns its whole token budget re-litigating a
         single variant and never reaches "# Clinical Conclusion" at all.
         Retry the draft generation once more (fresh call, same prompt —

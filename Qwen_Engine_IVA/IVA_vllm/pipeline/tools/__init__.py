@@ -11,6 +11,8 @@ from pipeline.tools.clinvar_hotspot import ClinVarHotspotTool
 from pipeline.tools.uniprot_domain import UniProtDomainTool
 from pipeline.tools.clingen_allele import ClinGenAlleleTool
 from pipeline.tools.genereviews import GeneReviewsTool
+from pipeline.tools.repeat_region import RepeatRegionTool
+from pipeline.tools.lof_mechanism import LofMechanismTool
 
 __all__ = [
     "AutoPVS1Tool",
@@ -25,4 +27,6 @@ __all__ = [
     "UniProtDomainTool",
     "ClinGenAlleleTool",
     "GeneReviewsTool",
+    "RepeatRegionTool",
+    "LofMechanismTool",
 ]

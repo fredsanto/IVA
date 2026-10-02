@@ -26,7 +26,7 @@ _PP4_LINE_RE = re.compile(r"^-\s*PP4\b.*$", re.MULTILINE)
 # reasoning.parse_cluster_match()'s "CLUSTER_PHENOTYPE: VERDICT"
 # one-line format, which only matches Stage 1's own raw reasoning output.
 _INJECTED_CLUSTER_MATCH_RE = re.compile(
-    r"---\s*CLUSTER_PHENOTYPE\b.*?CLUSTER_PHENOTYPE:\s*(YES|PARTIAL|NONE|INCIDENTAL|UNKNOWN)\b",
+    r"---\s*CLUSTER_PHENOTYPE\b.*?CLUSTER_PHENOTYPE:\s*(YES|PARTIAL|NONE|INCIDENTAL|EXCLUDED|UNKNOWN)\b",
     re.IGNORECASE | re.DOTALL,
 )
 

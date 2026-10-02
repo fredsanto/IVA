@@ -382,7 +382,60 @@ def _parse_autopvs1_html(html: str) -> dict:
         flowchart is not None
         and not bool(re.search(r"incompatible with recommendations", full_text, re.I))
     )
+    # NF4 reason #2 "LoF frequent in this exon" (not "exon absent from
+    # biologically-relevant transcripts") — the only NF4 case the recessive
+    # override below applies to.
+    data["lof_frequent_in_exon"] = bool(re.search(
+        r"Maximum LOF population frequency in exon .*?higher than the threshold", full_text, re.S))
     return data
+
+
+# ── Recessive-gene NF4 override ───────────────────────────────────────────────
+# AutoPVS1's NF4 path stops at "Unmet" when the exon's maximum LoF population
+# frequency exceeds its own 0.1% threshold, before the ClinGen ">10% of protein
+# removed" step. In a recessive gene that frequency is carried by heterozygous
+# carriers of pathogenic alleles, so it does not show the region tolerates LoF.
+# For those variants the >10% step is computed here: residues removed from the
+# truncation position to the end of the NP_ protein (length from NCBI).
+#   > 10% removed -> Strong (+4); otherwise Moderate (+2).
+
+_PHGVS_POS_RE = re.compile(r"(NP_\d+\.\d+):p\.\(?[A-Z][a-z]{0,2}(\d+)")
+_RECESSIVE_RE = re.compile(r"\bAR\b")
+REMOVED_FRACTION_STRONG = 0.10
+
+
+def _protein_length(accession: str) -> int | None:
+    from pipeline.tools.websearch import _ncbi_get
+    try:
+        data = _ncbi_get("esummary.fcgi", {"db": "protein", "id": accession, "retmode": "json"}).json()
+        uid = data["result"]["uids"][0]
+        return int(data["result"][uid]["slen"])
+    except Exception as e:
+        logger.warning("[AutoPVS1] protein length lookup failed for %s: %s", accession, e)
+        return None
+
+
+def _recessive_nf4_override(d: dict) -> tuple[str, str] | None:
+    """(strength, explanation) for a recessive-gene NF4 'LoF frequent' Unmet,
+    or None when the override does not apply."""
+    if "NF4" not in (d.get("pvs1_path") or "") or d.get("pvs1_strength") != "Unmet" \
+            or not d.get("lof_frequent_in_exon"):
+        return None
+    m = _PHGVS_POS_RE.search(d.get("phgvs") or "")
+    if not m:
+        return None
+    accession, pos = m.group(1), int(m.group(2))
+    length = _protein_length(accession)
+    if not length or pos > length:
+        return None
+    removed = (length - pos + 1) / length
+    strength = "Strong" if removed > REMOVED_FRACTION_STRONG else "Moderate"
+    return strength, (
+        f"{strength} — recessive gene: AutoPVS1 stopped at Unmet only because LoF variants in "
+        f"this exon exceed its 0.1% population threshold, which carriers of recessive alleles "
+        f"reach. Truncation at residue {pos} of {length} ({accession}) removes "
+        f"{removed:.1%} of the protein (>10% -> Strong, otherwise Moderate)"
+    )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -397,6 +450,7 @@ def fetch_and_format_autopvs1(
     hgvs:  str = "",
     hg:    str = "hg19",
     expected_gene: str = "",
+    recessive: bool = False,
 ) -> str | None:
     """
     Full pipeline: fetch AutoPVS1 evidence and format it as a string block.
@@ -421,6 +475,9 @@ def fetch_and_format_autopvs1(
                         "NM_000000:c.100C>A p.C34X" (space-split: first token used)
         hg            : genome build ("hg19" or "hg38")
         expected_gene : variant's Gene field; used for cross-validation
+        recessive     : the variant's Inheritance includes AR (the AutoPVS1
+                        disease-mechanism table's AR inheritance also counts);
+                        enables the NF4 override above
 
     Returns a multi-line string ready to embed in the augmented context,
     or None if the fetch failed or returned unusable data.
@@ -477,6 +534,12 @@ def fetch_and_format_autopvs1(
             )
             return None
 
+    recessive = recessive or any(
+        _RECESSIVE_RE.search(row.get("Inheritance") or "") for row in d.get("disease_mechanism") or []
+    )
+    override = _recessive_nf4_override(d) if recessive else None
+    strength = override[0] if override else d.get("pvs1_strength")
+
     # ── Format output ─────────────────────────────────────────────────────────
     def _val(v) -> str:
         return str(v) if v not in (None, "", [], {}) else "—"
@@ -501,8 +564,12 @@ def fetch_and_format_autopvs1(
         f"  Haploinsuff.   : {_val(d.get('haploinsufficiency'))}",
         f"  PVS1 path      : {_val(d.get('pvs1_path'))}",
         f"  PVS1 steps     : {steps_str}",
-        f"  PVS1 strength  : {_val(d.get('pvs1_strength'))}",
+        f"  PVS1 strength  : {_val(strength)}",
         f"  PVS1 applicable: {d.get('pvs1_applicable', '—')}",
+    ]
+    if override:
+        lines.append(f"  PVS1 override  : {override[1]}")
+    lines += [
         f"  Disease mech.  : {disease_str}",
         f"  ClinVar        : {_val(d.get('clinvar_url'))}",
         f"  gnomAD         : {_val(d.get('gnomad_url'))}",
@@ -704,6 +771,7 @@ class AutoPVS1Tool(NetworkTool):
                 hgvs=hgvs_raw,
                 hg=context.genome_build,
                 expected_gene=variant.get("Gene", ""),
+                recessive=bool(_RECESSIVE_RE.search(variant.get("Inheritance", "") or "")),
             )
         except requests.exceptions.RequestException as e:
             raise ToolFetchError(

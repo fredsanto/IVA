@@ -9,6 +9,8 @@ Gate logic:
   - Runs on any variant with resolvable genomic coordinates
   - Skips synonymous and intergenic variants (no splice impact possible)
   - Skips if Ref_seq or Var_seq is NA and Variant string cannot be parsed
+  - Input table has a SpliceAI column but no score for this variant:
+    reports no significant SpliceAI score, without calling the API
 
 Public pipeline class:
   SpliceAITool — NetworkTool
@@ -326,6 +328,13 @@ class SpliceAITool(NetworkTool):
         return True
 
     def run(self, variant: dict, context: ToolContext) -> str | None:
+        # Reached only when SpliceAI_score is NA (manifest gate). If the input
+        # table has a SpliceAI column, its annotation already covered this
+        # variant and found no score: report that instead of calling the
+        # rate-limited public API.
+        if any("spliceai" in col.lower() for col in context.raw_fields):
+            return "No significant score from SpliceAI (no score for this variant in the input SpliceAI annotation)."
+
         try:
             coords = parse_variant_coords(
                 variant_str=variant.get("Variant", ""),

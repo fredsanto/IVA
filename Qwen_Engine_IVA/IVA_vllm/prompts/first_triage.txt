@@ -40,12 +40,7 @@ FOR keeping the variant (e.g. gene relevant, variant rare, mechanism plausible, 
 Discard-case is the best argument AGAINST it (e.g. benign, common, unrelated gene).
 If there is truly no argument for one side, write "no argument".
 
-Example output (balanced):
-Keep-case: gene linked to phenotype, variant rare
-Discard-case: ClinVar benign, AF 0.12
-Decision: DISCARD
-
-Example output (no positive evidence):
-Keep-case: PVS1 very strong; rare variant in known RP gene
-Discard-case: no gene-disease link in literature; no reported evidence
-Decision: KEEP
+Output form:
+Keep-case: <strongest reason to KEEP>
+Discard-case: <strongest reason to DISCARD>
+Decision: <KEEP or DISCARD>

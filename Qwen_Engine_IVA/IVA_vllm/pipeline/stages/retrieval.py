@@ -93,7 +93,6 @@ def run(
     def _process_one(i: int) -> tuple[int, str, list[dict]]:
         variant    = variants[i]
         raw_fields = raw_rows[i] if (raw_rows and i < len(raw_rows)) else {}
-        variant_str = _variant_dict_to_str(variant)
 
         logger.info("[Retrieval] Variant %d/%d: %s", i + 1, total,
                     variant.get("Variant", "?"))
@@ -106,6 +105,8 @@ def run(
             genome_build=genome_build,
             raw_fields=raw_fields,
         )
+        # After the tools: ClinVarGeneStatsTool fills ClinVar_class.
+        variant_str = _variant_dict_to_str(variant)
 
         # Build context: patient data header
         parts = [f"PATIENT DATA:\n{patient_phenotype}"]

@@ -39,6 +39,7 @@ import threading
 import xml.etree.ElementTree as ET
 
 from pipeline.tools.base import NetworkTool
+from pipeline.tools.autopvs1 import parse_variant_coords
 from pipeline.tools.websearch import _ncbi_get, _clean_xml_text, DEFAULT_TIMEOUT
 from pipeline.core.context import ToolContext
 from pipeline.core.errors import ToolFetchError, ToolParseError
@@ -278,42 +279,163 @@ class ClinVarGeneStatsTool(NetworkTool):
             return None
         return cls._REVIEW_STATUS_STARS.get(review_status.strip().lower())
 
-    def _resolve_variation_id(self, gene: str, hgvs: str) -> str | None:
-        """
-        Returns the resolved ClinVar variation ID, or None when the esearch
-        call itself SUCCEEDED but genuinely found no matching record (a real
-        negative). A failed/timed-out/rate-limited call raises ToolFetchError
-        instead of silently returning None — a real past failure: this used
-        to catch every exception here and return None indistinguishably from
-        a genuine "not found," so a transient NCBI failure (this pipeline
-        hammers NCBI across up to 32 concurrent workers per process, times
-        several concurrent server processes sharing one cluster egress IP —
-        see the NCBI_API_KEY/retry notes on _ncbi_get) surfaced in the report
-        as the confident-sounding "Not resolvable — no ClinVar record found
-        for this specific variant," even for a variant ClinVar actually has a
-        well-populated, conflicting-classification record for. Letting the
-        exception propagate lets the manifest's own retry:attempts/backoff
-        config (clinvar_gene_stats.yaml) actually apply, and on final failure
-        produces the standard "[FAILED — ToolFetchError]: ..." note instead
-        of a false negative.
-        """
-        cdna_match = self._CDNA_CHANGE_RE.search(hgvs) if hgvs and hgvs != "NA" else None
-        variant_term = cdna_match.group(0) if cdna_match else hgvs
-        term = f"{gene}[gene] AND {variant_term}[variant name]" if variant_term and variant_term != "NA" else None
-        if not term:
-            return None
+    # Max distance (bp) between the variant's own Position and a ClinVar
+    # record's start, on either assembly. An indel's start differs by a few
+    # bases between ANNOVAR, VCF and ClinVar's own normalization.
+    _LOCUS_WINDOW = 12
+
+    # AutoPVS1's own normalized cDNA line ("cHGVS : NM_x.y:c.123del").
+    _AUTOPVS1_CHGVS_RE = re.compile(r"^\s*cHGVS\s*:\s*(\S+)", re.MULTILINE)
+
+    # A transcript and its own cDNA in one annotation: "NM_x.y:c.N" (AutoPVS1)
+    # or "GENE:NM_x:exonK:c.N" (ANNOVAR).
+    _TX_CDNA_RE = re.compile(r"\b([NX][MR]_\d+(?:\.\d+)?)(?::[^:|\s]*)*?:(c\.[^\s:;()|]+)")
+
+    def _esearch_ids(self, term: str) -> list[str]:
         try:
             data = _ncbi_get(
                 "esearch.fcgi",
-                {"db": "clinvar", "term": term, "retmode": "json", "retmax": 1},
+                {"db": "clinvar", "term": term, "retmode": "json", "retmax": 20},
                 self.timeout,
             ).json()
         except Exception as e:
-            raise ToolFetchError(
-                f"ClinVar variation-ID lookup failed for {gene} {hgvs}: {e}"
-            ) from e
-        ids = data.get("esearchresult", {}).get("idlist", [])
-        return ids[0] if ids else None
+            raise ToolFetchError(f"ClinVar esearch failed for term={term!r}: {e}") from e
+        return data.get("esearchresult", {}).get("idlist", [])
+
+    # Unversioned transcript accession -> current "NM_x.y" (None if unknown).
+    _tx_version_cache: dict[str, str | None] = {}
+
+    def _transcript_version(self, accession: str) -> str | None:
+        if accession not in self._tx_version_cache:
+            try:
+                res = _ncbi_get(
+                    "esummary.fcgi",
+                    {"db": "nuccore", "id": accession, "retmode": "json"},
+                    self.timeout,
+                ).json().get("result", {})
+            except Exception as e:
+                raise ToolFetchError(f"nuccore version lookup failed for {accession}: {e}") from e
+            versions = [res[u].get("accessionversion") for u in res.get("uids", [])]
+            self._tx_version_cache[accession] = next(
+                (v for v in versions if v and v.split(".")[0] == accession), None
+            )
+        return self._tx_version_cache[accession]
+
+    def _ids_at_locus(self, ids: list[str], locus: tuple[str, int, str, str]) -> list[str]:
+        """Keeps the IDs whose ClinVar record lies at the variant's own
+        position (either assembly, within _LOCUS_WINDOW). For an SNV, a
+        record whose canonical SPDI states different alleles is dropped too
+        (several alleles share one rsID)."""
+        if not ids:
+            return []
+        try:
+            res = _ncbi_get(
+                "esummary.fcgi",
+                {"db": "clinvar", "id": ",".join(ids), "retmode": "json"},
+                self.timeout,
+            ).json().get("result", {})
+        except Exception as e:
+            raise ToolFetchError(f"ClinVar esummary failed for ids={ids}: {e}") from e
+        chrom, pos, ref, alt = locus
+        snv = len(ref) == 1 and len(alt) == 1
+        kept = []
+        for vid in ids:
+            sets = res.get(vid, {}).get("variation_set", [])
+            if not any(
+                str(loc.get("chr", "")).upper() == chrom
+                and str(loc.get("start", "")).isdigit()
+                and abs(int(loc["start"]) - pos) <= self._LOCUS_WINDOW
+                for vs in sets for loc in vs.get("variation_loc", [])
+            ):
+                continue
+            if snv:
+                spdis = [vs.get("canonical_spdi") or "" for vs in sets]
+                parts = [sp.split(":") for sp in spdis if sp.count(":") == 3]
+                if parts and not any(d.upper() == ref and i.upper() == alt for _, _, d, i in parts):
+                    continue
+            kept.append(vid)
+        return kept
+
+    def _resolve_variation_id(self, variant: dict, context: ToolContext) -> str | None:
+        """
+        Returns this variant's ClinVar variation ID, or None when no record
+        could be matched to it. Routes, in order:
+          1. rsID in its own field: rsN[VRID].
+          2. Transcript-specific cDNA as one quoted variant name,
+             "NM_x.y:c.N"[varnam]: AutoPVS1's own normalized cHGVS first,
+             then, for an SNV only, the input HGVS's "NM_x:c.N" pair on
+             AutoPVS1's transcript (every input pair when AutoPVS1 gave
+             none; an unversioned transcript's current version is looked
+             up in nuccore, since the [varnam] index needs one). An indel's
+             input HGVS is skipped: ANNOVAR's indel cDNA is not valid HGVS
+             (0 of 91 indels resolved by it on the 327-case run).
+          3. GENE[gene] AND c.N[variant name], same cDNA tokens.
+        Unquoted, ClinVar splits "NM_x:c.N" at the colon into two separate
+        words and drops the field tag; without a version the quoted name
+        matches nothing.
+        Every hit must lie at the variant's own position (_ids_at_locus),
+        and a route counts only when exactly one record is left. Without
+        usable coordinates nothing can be checked and nothing is returned.
+
+        Why: the input's ANNOVAR HGVS for an indel is often a truncated,
+        non-HGVS string ("c.100_101G"), which the [variant name] index
+        either misses or matches to an unrelated record of the same gene
+        (verified on a 327-case run: every one of 18 statuses resolved by
+        the old name-only search belonged to another variant). Checked
+        against the record's position, rsID search was always right, and
+        the AutoPVS1 cDNA recovered most indels the input HGVS missed.
+
+        A failed NCBI call raises ToolFetchError (not None): a transient
+        failure must not read as "no ClinVar record" — the manifest's
+        retry config then applies, and a final failure prints as
+        "Fetch failed", not as a confident negative.
+        """
+        try:
+            chrom, pos, ref, alt = parse_variant_coords(
+                variant_str=variant.get("Variant", ""),
+                chrom_field=variant.get("Chromosome", ""),
+                pos_field=variant.get("Position", ""),
+                ref_field=variant.get("Ref_seq", ""),
+                alt_field=variant.get("Var_seq", ""),
+            )
+            locus = (chrom.strip().upper().removeprefix("CHR"), int(pos),
+                     (ref or "").upper(), (alt or "").upper())
+        except (ValueError, TypeError):
+            return None
+
+        gene = context.field("Gene")
+        terms: list[str] = []
+        rs_id = context.field("RS_ID").strip()
+        if re.fullmatch(r"rs\d+", rs_id):
+            terms.append(f"{rs_id}[VRID]")
+        ap_m = self._AUTOPVS1_CHGVS_RE.search(context.all_outputs.get("autopvs1") or "")
+        pairs: list[tuple[str, str]] = self._TX_CDNA_RE.findall(ap_m.group(1)) if ap_m else []
+        ap_txs = {tx.split(".")[0] for tx, _ in pairs}
+        if len(locus[2]) == 1 and len(locus[3]) == 1:
+            seen = {(tx.split(".")[0], cdna) for tx, cdna in pairs}
+            for src in context.field("HGVS").split("|"):
+                for tx, cdna in self._TX_CDNA_RE.findall(src):
+                    key = (tx.split(".")[0], cdna)
+                    if (not ap_txs or key[0] in ap_txs) and key not in seen:
+                        seen.add(key)
+                        pairs.append((tx, cdna))
+        for tx, cdna in pairs:
+            tx = tx if "." in tx else self._transcript_version(tx)
+            if tx:
+                terms.append(f'"{tx}:{cdna}"[varnam]')
+        cdnas = list(dict.fromkeys(cdna for _, cdna in pairs))
+        if not cdnas:
+            m = self._CDNA_CHANGE_RE.search(context.field("HGVS"))
+            cdnas = [m.group(0)] if m else []
+        if gene != "NA":
+            terms += [f"{gene}[gene] AND {c}[variant name]" for c in cdnas]
+
+        for term in terms:
+            kept = self._ids_at_locus(self._esearch_ids(term), locus)
+            if len(kept) == 1:
+                logger.info("ClinVar variation %s resolved for %s via %r", kept[0], gene, term)
+                return kept[0]
+        return None
 
     def _fetch_classification_tally(self, variation_id: str) -> dict | None:
         """
@@ -490,7 +612,7 @@ class ClinVarGeneStatsTool(NetworkTool):
         hgvs = context.field("HGVS")
         fetch_failed = False
         try:
-            variation_id = preresolved_id or self._resolve_variation_id(gene, hgvs)
+            variation_id = preresolved_id or self._resolve_variation_id(variant, context)
             result = self._fetch_classification_tally(variation_id) if variation_id else None
         except ToolFetchError as e:
             logger.warning("ClinVar variant-level lookup failed for %s %s: %s", gene, hgvs, e)
@@ -539,6 +661,11 @@ class ClinVarGeneStatsTool(NetworkTool):
                 f"ClinVar aggregate classification (official consensus call): {aggregate_classification}\n"
                 if aggregate_classification else ""
             )
+            # ClinVar_class comes only from this live record (the normalizer
+            # never takes it from the upload); later stages read it from the
+            # variant dict.
+            if aggregate_classification:
+                variant["ClinVar_class"] = aggregate_classification
             status = clinvar_status(tally, result["has_functional_ref"], result["has_case_ref"])
             variant_block = (
                 f"CLINVAR STATUS: {status}\n"

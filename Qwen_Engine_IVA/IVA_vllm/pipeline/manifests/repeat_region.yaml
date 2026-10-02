@@ -1,0 +1,13 @@
+name: repeat_region
+description: "UCSC simpleRepeat/RepeatMasker overlap for in-frame indels; stop-loss pass-through — grounds PM4."
+enabled: true
+
+# order 3: reads AutoPVS1's normalized variant line and in-frame tag
+# (context.all_outputs["autopvs1"], order 2).
+order: 3
+parallel: true
+
+timeout: 30
+retry:
+  attempts: 2
+  backoff: 2.0
