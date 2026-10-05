@@ -506,6 +506,7 @@ def _block_acmg_entries(
                 "lines":  lines,
                 "layer":  layer_name,
                 "causative_pair": causative_pair,
+                "pair": bool(joint_m),
             })
 
     for layer_name, blocks in layer_outputs.items():

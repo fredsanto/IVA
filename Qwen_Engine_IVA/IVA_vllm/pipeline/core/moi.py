@@ -387,10 +387,13 @@ def build_gene_mode_cache(
     CGD's gene-level inheritance is used only when all three give nothing.
     An X-linked mode is excluded for a gene whose chromosome is known and not X.
 
-    Returns (gene_mode_cache, gene_mode_reasoning_cache); mode "" = unknown.
-    The reasoning text lists each source's contribution."""
+    Returns (gene_mode_cache, gene_mode_reasoning_cache, gene_mode_sources_cache);
+    mode "" = unknown. The reasoning text lists each source's contribution;
+    the sources cache holds them as data for the clinical report: one dict per
+    source that gave a mode — {"source", "mode", "detail", "refs"}."""
     from pipeline.tools.litvar2 import LitVar2SummaryTool
-    from pipeline.tools.medgen_features import gene_disease_inheritance, split_condition_list
+    from pipeline.tools.medgen_features import gene_disease_ids, gene_disease_inheritance, split_condition_list
+    from pipeline.core.evidence_sources import refs_for
 
     kept_set = set(kept_indices)
     targets: list[tuple] = []
@@ -411,11 +414,12 @@ def build_gene_mode_cache(
                     matched.append(name)
         targets.append((gene, kept_in_gene, gene_chrom, allow_x_linked, all_names, matched))
 
-    def _resolve_one(item: tuple) -> tuple[str, str, str]:
+    def _resolve_one(item: tuple) -> tuple[str, str, str, list[dict]]:
         gene, kept_in_gene, gene_chrom, allow_x_linked, all_names, matched = item
         conditions = matched or all_names
         labels: list[str] = []
         notes: list[str] = []
+        sources: list[dict] = []
 
         medgen = gene_disease_inheritance(gene)
         if medgen is None:
@@ -427,6 +431,16 @@ def build_gene_mode_cache(
                              for _, modes in used for mode_name in modes]
             medgen_labels = [lab for lab in medgen_labels if lab]
             labels += medgen_labels
+            medgen_ids = gene_disease_ids(gene)
+            for title, modes in used:
+                title_labels = [lab for lab in (classify_inheritance_mode(m, allow_x_linked) for m in modes) if lab]
+                if title_labels:
+                    ids = medgen_ids.get(title, {})
+                    sources.append({
+                        "source": "MedGen", "mode": combine_modes(title_labels, gene_chrom), "detail": title,
+                        "refs": [f"OMIM:{m}" for m in ids.get("omim", [])]
+                                + ([f"MedGen {ids['cui']}"] if ids.get("cui") else []),
+                    })
             notes.append(
                 f"MedGen: {combine_modes(medgen_labels, gene_chrom) or 'none'}"
                 + (f" ({'; '.join(t for t, m in used if m)})" if any(m for _, m in used) else "")
@@ -439,12 +453,18 @@ def build_gene_mode_cache(
         csv_label = classify_inheritance_mode(csv_text, allow_x_linked)
         if csv_label:
             labels.append(csv_label)
+            sources.append({"source": "Input file (Inheritance/OMIM_inheritance)", "mode": csv_label,
+                            "detail": "", "refs": []})
         notes.append(f"CSV field: {csv_label or 'none'}")
 
         evidence = " ".join(evidence_by_index.get(i, "") for i in kept_in_gene)
         llm_modes, llm_reasoning, accepted, discarded = _llm_classify_mode(
             gene, conditions, evidence, llm, allow_x_linked)
         labels += llm_modes
+        for label, quote in accepted:
+            sources.append({"source": "Literature/GeneReviews",
+                            "mode": {lab: m for lab, m in _MODE_FIELDS.values()}[label],
+                            "detail": quote, "refs": refs_for(quote, evidence)})
         notes.append(
             f"Literature/GeneReviews: {combine_modes(llm_modes, gene_chrom) or 'UNKNOWN'}"
             + "".join(f' [{label}: "{quote}"]' for label, quote in accepted)
@@ -463,26 +483,30 @@ def build_gene_mode_cache(
                 cgd_label = ""
             mode = cgd_label
             notes.append(f"CGD (fallback): {cgd_label or 'none'}")
+            if cgd_label:
+                sources.append({"source": "CGD", "mode": cgd_label, "detail": "", "refs": ["CGD"]})
 
         scope = (f"conditions matching the patient: {', '.join(matched)}" if matched
                  else "no condition matched the patient — all of the gene's conditions")
         reasoning = f"Sources ({scope}) — " + "; ".join(notes) + "."
         if llm_reasoning:
             reasoning += f" Literature reading: {llm_reasoning}"
-        return gene, mode, reasoning
+        return gene, mode, reasoning, sources
 
     gene_mode_cache: dict[str, str] = {}
     gene_mode_reasoning_cache: dict[str, str] = {}
+    gene_mode_sources_cache: dict[str, list[dict]] = {}
     if targets:
         workers = min(MAX_WORKERS_MODE_CLASSIFICATION, len(targets))
         with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
             for future in as_completed([pool.submit(_resolve_one, t) for t in targets]):
-                gene, mode, reasoning = future.result()
+                gene, mode, reasoning, sources = future.result()
                 gene_mode_cache[gene] = mode
                 gene_mode_reasoning_cache[gene] = reasoning
+                gene_mode_sources_cache[gene] = sources
                 logger.info("[MOI] Gene %s: mode=%r — %s", gene, mode or "UNKNOWN",
                             reasoning.split(" Literature reading:")[0])
-    return gene_mode_cache, gene_mode_reasoning_cache
+    return gene_mode_cache, gene_mode_reasoning_cache, gene_mode_sources_cache
 
 
 def build_recessive_gene_groups(

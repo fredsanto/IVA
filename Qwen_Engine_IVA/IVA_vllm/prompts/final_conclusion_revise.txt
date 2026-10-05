@@ -161,12 +161,7 @@ Specifically check for:
   cutoff — any variant whose own layer/base block states a total ACMG point
   value >= 6 (Likely Pathogenic or Pathogenic, Tavtigian et al. 2020) MUST
   appear in section 2. Scan every layer block's own total-points line and
-  compare against section 2's variant list. A real past failure: a RECESSIVE
-  layer variant scored 9.5 points (Likely Pathogenic, e.g. via a reduced-
-  weight PM3 for unconfirmed segregation) and was left out of section 2
-  entirely — reasoning-only mention doesn't count — because a DIFFERENT
-  gene's variant scored higher (e.g. 11 points, Pathogenic) and the draft
-  treated that as a single winner. Scoring higher than another qualifying
+  compare against section 2's variant list. Scoring higher than another qualifying
   variant is NEVER a valid reason to omit one that independently clears the
   >=6 bar — both are independently causative unless one is excluded by one of
   the OTHER named checks in this list (TRANS/CIS collapse, SINGLE-HIT
@@ -186,11 +181,7 @@ Specifically check for:
   exempt): that block already states its own backend-computed "**Joint
   compound-het classification:**" line — this is the authoritative,
   already-verified verdict; do not recompute it from the two variants'
-  individual totals yourself. A real past failure: Variant B in a pair scored
-  11 points (Pathogenic) while Variant A scored only 1 point (VUS); the draft
-  listed the pair in section 2 as "Pathogenic" causative because Variant B
-  alone cleared >=6, ignoring that Variant A's weak score means the second
-  hit required for a biallelic recessive diagnosis is not established. Read
+  individual totals yourself. Read
   the block's "**Joint compound-het classification:**" line:
     - If it says CAUSATIVE: both variants belong in section 2 as co-causative,
       exactly as the CAUSATIVE-THRESHOLD OMISSION CHECK above would otherwise
@@ -221,11 +212,8 @@ Specifically check for:
   section 2's prose (e.g. "the gene is a known cause of X"), and verify that
   exact disease name appears in THAT gene's own layer block / embedded base
   conclusion above — not in a different gene's block, and not merely implied
-  by a shared category phrase used earlier in the draft (e.g. "visual
-  impairment (retinitis pigmentosa or cone-rod dystrophy)" in the reasoning
-  section does NOT license attributing "retinitis pigmentosa" to every gene
-  discussed nearby — each gene keeps only the specific disease its own
-  evidence names). When multiple genes are listed together and share a broad
+  by a shared category phrase used earlier in the draft — each gene keeps
+  only the specific disease its own evidence names). When multiple genes are listed together and share a broad
   phenotype category, it is common for the draft to blur one gene's specific
   named disease into a neighboring gene's paragraph — this is a HARD ERROR,
   not a style issue, even when the borrowed disease name is phenotypically

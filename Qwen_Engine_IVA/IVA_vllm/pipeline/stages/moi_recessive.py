@@ -119,6 +119,13 @@ def _force_pair_pm3(pair_block: str, marker: str, partner_base_conclusion: str, 
                     f"(different parents) with a Likely Pathogenic or Pathogenic partner "
                     f"(partner base score: {partner_base:g} pts).")
         delta = "**Recessive delta:** +2 confirmed"
+    elif phase == "denovo":
+        criteria = (f"**Recessive criteria applied:** PM3 [Moderate, +2] — compound heterozygous "
+                    f"assumed with a Likely Pathogenic or Pathogenic partner (partner base score: "
+                    f"{partner_base:g} pts); one allele is de novo, so trans is assumed, not "
+                    f"shown — PHASE MUST BE CHECKED (parental testing cannot phase a de novo "
+                    f"allele; long-read sequencing or cloning needed).")
+        delta = "**Recessive delta:** +2 (trans assumed — phase must be checked)"
     else:
         criteria = (f"**Recessive criteria applied:** PM3 (hypothesis — trans phase not "
                     f"confirmed) [Moderate, +2] — partner is Likely Pathogenic or Pathogenic "
@@ -186,6 +193,8 @@ def _inject_joint_status(pair_block: str, joint_status: str | None) -> str:
 
 _PHASE_LABELS = {
     "trans":   "TRANS confirmed (different parents) — compound heterozygous model applies.",
+    "denovo":  "ASSUMED TRANS (one variant is de novo; parental testing cannot phase it) — "
+               "compound heterozygous model applies, but state that phase must be checked.",
     "unknown": "UNKNOWN (phase not determinable from available allelic-balance data) — "
                "compound heterozygous model may still apply per biallelic evidence, "
                "but phase uncertainty must be noted explicitly.",
@@ -252,7 +261,7 @@ def run_pair(
         variant_a_context, variant_b_context: Per-variant context strings from retrieval.
         variant_a_base_conclusion, variant_b_base_conclusion: Layer 2's full structured
                           output for each variant — ground truth this stage adds to.
-        phase:            classify_phase() result — must be "trans" or "unknown"; callers
+        phase:            classify_phase() result — "trans", "denovo" or "unknown"; callers
                            must never call this with "cis" (that pair should have been
                            excluded before reaching this stage).
         cross_analysis:    Gene-level cross_analysis.run() text, or None if unavailable.
@@ -265,7 +274,7 @@ def run_pair(
     if phase not in _PHASE_LABELS:
         raise ValueError(
             f"moi_recessive.run_pair called with phase={phase!r} for gene={gene} — "
-            "only 'trans' or 'unknown' may reach this stage; 'cis' must be excluded upstream."
+            "only 'trans', 'denovo' or 'unknown' may reach this stage; 'cis' must be excluded upstream."
         )
 
     logger.info("[MOIRecessive] Generating recessive analysis for gene %s (phase=%s)...", gene, phase)

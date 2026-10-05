@@ -21,9 +21,7 @@ Weight the retrieved evidence as follows:
 - Mechanistic, pathway, or functional relevance (no gene–disease link) → weak reason to keep.
 
 A real patient's phenotype often lists findings from more than one distinct
-cluster (e.g. a neurodevelopmental cluster — epilepsy, intellectual disability,
-autism — AND a separate cluster — an organ malformation, a cancer, a skeletal
-finding). "NO DISEASE LINK" / "gene unrelated to phenotype" only applies when the
+cluster (cluster A and an unrelated cluster B). "NO DISEASE LINK" / "gene unrelated to phenotype" only applies when the
 evidence affirmatively links this gene to NONE of the patient's clusters. If the
 evidence links the gene to AT LEAST ONE distinct cluster, that is a reason to KEEP
 — even if the evidence is silent on the patient's other cluster(s). Being silent

@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING
 
 from pipeline.core.citations import validate_citations
 from pipeline.core.clinvar_reference import append_clinvar_reference
-from pipeline.core.acmg_points import resync_moi_total, splice_base_and_total
+from pipeline.core.acmg_points import cap_layer_pp1, resync_moi_total, splice_base_and_total
 from pipeline.core.acmg_bs2_dominant import validate_bs2_unaffected_dominant_carrier
 
 if TYPE_CHECKING:
@@ -102,6 +102,8 @@ def run_one(
     )
     # Base criteria + Total come from code, never from the model: splice the
     # Stage-4 base block, then (after BS2 below) Total = base + delta.
+    # PP1 here rests on one transmitting parent: Supporting at most.
+    result = cap_layer_pp1(result)
     result = splice_base_and_total(result, base_conclusion)
     # Mechanical DEFAULT-UNAFFECTED-POLICY BS2 check, before resync so the
     # inserted bullet gets folded into the Base/Total point lines below —

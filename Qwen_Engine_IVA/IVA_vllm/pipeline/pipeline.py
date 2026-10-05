@@ -69,14 +69,13 @@ from pipeline.tools.autopvs1           import (
 )
 from pipeline.core.errors              import ToolFetchError, ToolParseError
 from pipeline.core.clinvar_reference   import (
-    add_clinvar_status_to_findings, clinvar_status_from_context,
+    clinvar_status_from_context,
 )
 from pipeline.core.acmg_ps3            import surface_ps3_citations
 from pipeline.core.acmg_case_ref       import apply_case_reference
-from pipeline.core.citations           import validate_citations
 from pipeline.stages         import (
-    retrieval, reasoning, conclusion, cross_analysis, final_conclusion, first_triage,
-    moi_denovo, moi_dominant, moi_recessive, moi_xlinked, actionable,
+    retrieval, reasoning, conclusion, cross_analysis, clinical_report, first_triage,
+    moi_denovo, moi_dominant, moi_recessive, moi_xlinked,
 )
 
 logger = logging.getLogger(__name__)
@@ -779,6 +778,11 @@ class Pipeline:
                 "TRANS (different parents) — consistent with compound heterozygous "
                 "biallelic inheritance."
             ),
+            "denovo": (
+                "ASSUMED TRANS — one of the two variants is de novo, so parental "
+                "testing cannot phase the pair. Treat as compound heterozygous, "
+                "but state that phase must be checked."
+            ),
             "unknown": (
                 "UNKNOWN — phase not determinable from available parental "
                 "allelic-balance data. A compound-heterozygous model may still apply "
@@ -1064,7 +1068,7 @@ class Pipeline:
         # literature/GeneReviews evidence, combined (AD and AR → AD_AR); CGD
         # only when all are silent. Before reasoning (Stage 2a), which needs
         # the mode and the compound-het groups built from it.
-        gene_mode_cache, gene_mode_reasoning_cache = moi.build_gene_mode_cache(
+        gene_mode_cache, gene_mode_reasoning_cache, gene_mode_sources_cache = moi.build_gene_mode_cache(
             variants, kept_indices,
             {i: _evidence_only_context(i) for i in kept_indices},
             phenotype_list_cache, overlap_text_cache,
@@ -1323,10 +1327,14 @@ class Pipeline:
         # ── ACMG SF override: force INCLUDE for actionable variants that reached
         #     a second-triage decision (reasoning_failed ones are left EXCLUDEd —
         #     there is no reasoning text to build a conclusion/report block from). ─
+        # sf_forced: these reach the MOI layers only to be scored — the clinical
+        # report never lists them as causative or VUS (clinical_report.py).
+        sf_forced: set[int] = set()
         for i in actionable_indices:
             if i in reasoning_failed or i not in kept_indices:
                 continue
             if inclusion_decisions.get(i) != "INCLUDE":
+                sf_forced.add(i)
                 logger.info(
                     "[Pipeline] Second-triage override: variant %d (%s) is an ACMG SF "
                     "actionable finding — forced INCLUDE", i + 1, variants[i].get("Gene", "?"),
@@ -1855,32 +1863,23 @@ class Pipeline:
             if i in conclusions
         ]
 
-        final_summary = final_conclusion.run(
+        # Clinical Conclusion: code picks each section's variants and gathers
+        # their sourced facts, the model writes the text (clinical_report.py).
+        final_summary = clinical_report.run(
+            patient_phenotype=patient_phenotype,
+            variants=variants,
             layer_outputs=layer_outputs_for_summary,
-            patient_phenotype=patient_phenotype,
-            actionable_variants=actionable_flagged,
-            llm=self._llm,
-        )
-        # CLINVAR status next to every finding in sections 2-4 (causative,
-        # actionable, notable VUS), from each variant's own ClinVar evidence.
-        final_summary = add_clinvar_status_to_findings(final_summary, [
-            (variants[i].get("Gene", "NA"),
-             variants[i].get("HGVS", variants[i].get("Variant", "")),
-             clinvar_status_from_context(context_slices[i]))
-            for i in conclusions
-        ])
-        # Every PMID the final synthesis writes must exist in the evidence the
-        # layers were built from (retrieved context, base conclusions, layer
-        # blocks) — the final-conclusion model mistypes PMIDs like any stage.
-        final_summary = validate_citations(final_summary, "\n".join(
-            [context_slices[i] for i in conclusions]
-            + list(conclusions.values())
-            + [b for blocks in layer_outputs_for_summary.values() for b in blocks]
-        ))
-
-        actionable_section = actionable.run(
-            flagged=actionable_flagged,
-            patient_phenotype=patient_phenotype,
+            include_indices=include_indices,
+            sf_forced=sf_forced,
+            cluster_match=cluster_match_cache,
+            phenotype_lists=phenotype_list_cache,
+            overlap_texts=overlap_text_cache,
+            gene_modes=gene_mode_cache,
+            gene_mode_sources=gene_mode_sources_cache,
+            evidence={i: _evidence_only_context(i) for i in conclusions},
+            segregation=segregation_cache,
+            clinvar_status={i: clinvar_status_from_context(context_slices[i]) for i in conclusions},
+            actionable_flagged=actionable_flagged,
             llm=self._llm,
         )
 
@@ -1971,10 +1970,6 @@ class Pipeline:
         # it from the validated Stage-4 PS3 line so the reader always sees it.
         final_report = surface_ps3_citations(final_report, list(conclusions.values()))
 
-        if actionable_section:
-            final_report += (
-                f"\n{SEP_VARIANT}\nACTIONABLE VARIANTS (ACMG SF)\n{SEP_VARIANT}\n\n{actionable_section}\n"
-            )
 
         # Excluded/discarded variants go before the FINAL REPORT, not inside it.
         # Not gated on triage_ran: the proband-AB-artifact gate can populate

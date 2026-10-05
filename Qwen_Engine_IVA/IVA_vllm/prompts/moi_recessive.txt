@@ -35,7 +35,7 @@ TASK:
    skippable nicety. The Python gate above only blocks a confirmed CIS pair
    from reaching this stage — it deliberately still lets a pair with UNKNOWN
    phase through (no parental data to determine it either way), because that
-   pair may still be reportable as two independent findings. Two sub-cases:
+   pair may still be reportable as two independent findings. Three sub-cases:
 
    (a) PHASE line reads "TRANS confirmed": PM3 applies normally as a firm
    criterion. Check each variant's partner's classification explicitly
@@ -75,9 +75,16 @@ TASK:
    inherited variant in the same gene is NOT determinable from trio
    allelic-balance data at all (a de novo mutation lands on a random
    chromosome copy, not deterministically on the one opposite an inherited
-   allele) — this should have been "Phase: UNKNOWN" handled under sub-case
-   (b) above (hypothesis PM3 + "Potential" label + recommendation), not an
-   invented parent-of-origin used to grant a firm, unqualified PM3.
+   allele) — that pair is handled under sub-case (c) below, never with an
+   invented parent of origin.
+
+   (c) PHASE line reads "ASSUMED TRANS" (one of the two variants is de
+   novo): the pair is treated as compound heterozygous and PM3 is set by
+   the pipeline as for confirmed trans, with the ordinary labels. Never
+   describe the de novo variant as inherited from either parent. State
+   plainly that trans is assumed, not shown, and that phase must be checked
+   (parental testing cannot phase a de novo allele; long-read sequencing or
+   cloning of the region is needed).
 
 3. BASE CRITERIA ARE FIXED: each variant's base criteria (PP4 included)
    come from its own BASE CONCLUSION and are spliced in by code. Do not add,
@@ -116,7 +123,7 @@ Use exactly this format:
 # Recessive Analysis (compound heterozygous / biallelic) — [GENE] ([HGVS of Variant A] / [HGVS of Variant B])
 **Phase:** [copy the backend-determined phase verbatim from above]
 **Parental carrier status:** [what evidence IS present about parents being unaffected carriers, or "no parental phenotype data available"]
-**Recommendation:** [ONLY when step 5 applies — singleton, no parental AB data at all for either variant: "Parental/segregation testing recommended to confirm phase (cis vs. trans) before this compound heterozygous pair can be considered diagnostic." Omit this line entirely when step 5 does not apply.]
+**Recommendation:** [ONLY when step 5 applies — singleton, no parental AB data at all for either variant: "Parental/segregation testing recommended to confirm phase (cis vs. trans) before this compound heterozygous pair can be considered diagnostic." ONLY when Phase reads "ASSUMED TRANS": "Phase must be checked — one allele is de novo, so parental testing cannot establish trans; long-read sequencing or cloning recommended." Omit this line entirely otherwise.]
 
 DO NOT write "Base ACMG criteria" or "Base ACMG points" or "Total ACMG
 points" for either variant yourself — that block is spliced in mechanically

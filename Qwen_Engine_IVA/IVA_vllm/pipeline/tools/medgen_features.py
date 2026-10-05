@@ -42,6 +42,8 @@ _NON_CONDITION_FRAGMENTS = {
 
 _FEATURE_RE = re.compile(r"<ClinicalFeature[^>]*>\s*<Name>([^<]+)</Name>")
 _INHERITANCE_RE = re.compile(r"<ModeOfInheritance[^>]*>.*?<Name>([^<]+)</Name>", re.S)
+_OMIM_MIM_RE = re.compile(r"<OMIM>(.*?)</OMIM>", re.S)
+_MIM_RE = re.compile(r"<MIM>(\d+)</MIM>")
 
 _cache: dict[str, tuple[str, list[str]] | None] = {}
 _lock = threading.Lock()
@@ -125,6 +127,9 @@ def condition_features(name: str, gene: str) -> tuple[str, list[str]] | None:
 
 
 _gene_cache: dict[str, list[tuple[str, list[str]]]] = {}
+# {GENE: {MedGen title: {"cui": concept ID, "omim": [MIM numbers]}}}, filled by
+# the same gene lookup as _gene_cache.
+_gene_ids_cache: dict[str, dict[str, dict]] = {}
 
 
 def _fetch_gene_diseases(gene: str) -> list[tuple[str, list[str]]]:
@@ -148,11 +153,30 @@ def _fetch_gene_diseases(gene: str) -> list[tuple[str, list[str]]]:
         "esummary.fcgi", {"db": "medgen", "id": ",".join(uids), "retmode": "json"},
         DEFAULT_TIMEOUT,
     ).json().get("result", {})
+    ids = {}
+    for u in result.get("uids", []):
+        meta = html.unescape(result[u].get("conceptmeta", ""))
+        omim = _OMIM_MIM_RE.search(meta)
+        ids[result[u].get("title", "")] = {
+            "cui": result[u].get("conceptid", ""),
+            "omim": _MIM_RE.findall(omim.group(1)) if omim else [],
+        }
+    with _lock:
+        _gene_ids_cache[gene.strip().upper()] = ids
     return [
         (result[u].get("title", ""),
          list(dict.fromkeys(_INHERITANCE_RE.findall(html.unescape(result[u].get("conceptmeta", ""))))))
         for u in result.get("uids", [])
     ]
+
+
+def gene_disease_ids(gene: str) -> dict[str, dict]:
+    """{MedGen title: {"cui", "omim"}} for the gene's MedGen disease concepts
+    (fetched with gene_disease_inheritance); {} when not looked up or none."""
+    if gene_disease_inheritance(gene) is None:
+        return {}
+    with _lock:
+        return dict(_gene_ids_cache.get(gene.strip().upper(), {}))
 
 
 def gene_disease_inheritance(gene: str) -> list[tuple[str, list[str]]] | None:

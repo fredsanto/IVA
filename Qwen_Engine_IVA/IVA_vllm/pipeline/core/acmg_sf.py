@@ -118,6 +118,16 @@ ACMG_SF_CONDITIONS: dict[str, str] = {
 
 ACMG_SF_GENES: frozenset[str] = frozenset(ACMG_SF_CONDITIONS)
 
+# Inheritance column of the ACMG SF v3.2 table (AD, AR, XL, SD = semidominant).
+ACMG_SF_REFERENCE = "ACMG SF v3.2 (PMID:37347242)"
+_SF_AR = {"BTD", "CASQ2", "TRDN", "HFE", "GAA", "MUTYH", "RPE65", "ATP7B"}
+_SF_XL = {"GLA", "OTC"}
+_SF_SD = {"LDLR", "APOB"}
+ACMG_SF_INHERITANCE: dict[str, str] = {
+    g: "AR" if g in _SF_AR else "XL" if g in _SF_XL else "SD" if g in _SF_SD else "AD"
+    for g in ACMG_SF_CONDITIONS
+}
+
 # ClinVar_class substrings that rule out a pathogenic call even though they
 # may contain the substring "pathogenic" (e.g. "Conflicting interpretations
 # of pathogenicity").  Checked before the "pathogenic" substring match.

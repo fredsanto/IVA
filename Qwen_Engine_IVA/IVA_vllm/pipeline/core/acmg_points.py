@@ -714,6 +714,33 @@ _MODEL_BASE_POINTS_RE = re.compile(r"(?m)^\*\*Base ACMG points:\*\*[^\n]*\n?")
 _MODEL_TOTAL_RE = re.compile(r"(?m)^\*\*Total ACMG points:\*\*[^\n]*\n?")
 
 
+def cap_layer_pp1(section: str) -> str:
+    """
+    For ONE variant's dominant-inherited or X-linked layer section, before
+    splice_base_and_total: PP1 there rests on a single transmitting parent
+    (one informative meiosis), so it is Supporting at most. Rewrites any
+    stronger PP1 bullet to [Supporting, +1] and caps the layer's delta line
+    at +1 (PP1 is the only criterion these layers apply). Real observed
+    failure: PP1 [Strong, +4] from an affected father lifted a VUS-level
+    missense to Likely Pathogenic.
+    """
+    capped = False
+    for c in reversed(find_criteria(section, in_list=True)):
+        line_start = section.rfind("\n", 0, c.start) + 1
+        if c.code != "PP1" or c.points <= 1 or not section[line_start:c.start].lstrip().startswith(("-", "•")):
+            continue
+        logger.warning("acmg_points.cap_layer_pp1: PP1 %s from one parent — capped to [Supporting, +1]", c.tag())
+        start = c.start
+        while start > line_start and section[start - 1] in "*_":  # "**PP1_Strong**" markup, read into tag_end
+            start -= 1
+        section = section[:start] + "PP1 [Supporting, +1]" + section[c.tag_end:]
+        capped = True
+    dm = _MOI_DELTA_LINE_RE.search(section)
+    if capped and dm and float(dm.group(1)) > 1:
+        section = section[: dm.start(1)] + "+1" + section[dm.end(1):]
+    return section
+
+
 def splice_base_and_total(section: str, base_conclusion: str) -> str:
     """
     For ONE variant's MOI-layer section: removes whatever base criteria, Base

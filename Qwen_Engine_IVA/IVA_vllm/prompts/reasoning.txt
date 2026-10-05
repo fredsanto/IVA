@@ -19,9 +19,7 @@ Reasoning steps:
    Do NOT assert gene–disease links that are not explicitly present in the provided evidence.
 
    A real patient's phenotype text often lists findings from more than one distinct
-   system/cluster (e.g. a neurodevelopmental cluster — epilepsy, intellectual
-   disability, autism — AND a separate cluster — an organ malformation, a cancer, a
-   dysmorphic feature).
+   system/cluster (cluster A and an unrelated cluster B).
 
    The GENE PHENOTYPE LIST block above (backend-extracted, before this
    patient's phenotype was ever shown to that step) is this gene's own
@@ -76,10 +74,8 @@ Reasoning steps:
                covers "no usable gene-disease evidence either way"; INCIDENTAL
                is "this gene causes a real, named, different disease, and nothing
                here connects it to what this patient actually has." Typical
-               shape: a cancer-predisposition, cardiac, or metabolic gene with
-               a well-documented condition that has no neurodevelopmental,
-               dysmorphic, or other feature in common with the patient's own
-               phenotype text at all. A variant verdicted INCIDENTAL is NEVER
+               shape: a gene with a well-documented condition that shares no
+               feature with the patient's own phenotype text at all. A variant verdicted INCIDENTAL is NEVER
                reported as causative for this patient regardless of its ACMG
                score — it belongs only under Actionable/Incidental findings,
                never in the causative section — do not let a high PVS1/PM2
@@ -90,9 +86,8 @@ Reasoning steps:
    citation names an unrelated condition alongside other, silent-but-not-
    contradicting evidence — INCIDENTAL requires that NOTHING in the evidence
    connects this gene to any part of the patient's phenotype, not merely that
-   one citation happens to discuss a different condition too. A citation naming a broad category (e.g.
-   "epilepsy," "autism spectrum disorder," "intellectual disability,"
-   "cardiomyopathy") that the patient's phenotype text also contains — even in
+   one citation happens to discuss a different condition too. A citation naming a broad phenotype
+   category that the patient's phenotype text also contains — even in
    different words, even if the citation is silent on every other finding in the
    patient's list, even if the citation itself says it doesn't cover the patient's
    other features — is PARTIAL (or YES if it's genuinely the patient's whole
@@ -100,30 +95,11 @@ Reasoning steps:
    that symptom only — it is NOT evidence against the symptom(s) the citation DOES
    name.
 
-   WORKED EXAMPLE (apply this reasoning pattern):
-     Patient phenotype: "cognitive deficit, fine motor impairment, autism spectrum
-     disorder, epilepsy since age 2.5-3, partial alopecia, hypotelorism, frontal
-     bossing, high palate, V-shaped maxilla, facial hypotonia, pectus excavatum."
-     Evidence: "Mutations in the three synapsin genes [including this gene] lead to
-     profound social deficits and cortical dysfunctions... associated with epilepsy
-     and autism spectrum disorders" but does not mention the craniofacial or
-     skeletal features.
-     WRONG: "CLUSTER_PHENOTYPE: NONE — the evidence does not cover the
-     craniofacial features, specific motor deficits, or age of onset, so there is
-     no gene-phenotype link." (Treats partial coverage as no match — forbidden.)
-     RIGHT: "CLUSTER_PHENOTYPE: PARTIAL — the evidence affirmatively links
-     this gene to epilepsy and autism spectrum disorder, both present in this
-     patient (epilepsy since 2.5-3y, ASD). The evidence is silent on the
-     craniofacial/skeletal cluster (alopecia, hypotelorism, frontal bossing,
-     V-shaped maxilla, pectus excavatum); silence does not contradict them."
    A genuine "CLUSTER_PHENOTYPE: INCIDENTAL" looks like this: gene is
    evidenced, with real citable sources, for a well-established, named
-   condition (e.g. an isolated cardiac arrhythmia syndrome, or a cancer-
-   predisposition syndrome) with no neurodevelopmental, dysmorphic, or
-   skeletal association anywhere in the literature, and the patient's
-   phenotype is pure neurodevelopmental/dysmorphic with no finding from that
-   named condition at all — zero overlap on any named category, but the gene
-   itself is NOT uncharacterized; it has a real, different disease of its own.
+   condition that shares no finding with the patient's phenotype — zero
+   overlap on any named category, but the gene itself is NOT
+   uncharacterized; it has a real, different disease of its own.
 
    A genuine "CLUSTER_PHENOTYPE: NONE" is the plainer case: the evidence
    simply does not establish any condition for this gene at all (too sparse,

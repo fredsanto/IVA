@@ -57,9 +57,8 @@ AUTHORITATIVE and this check is CLOSED, do not re-derive it yourself from the
 surrounding prose:
   - Block says YES or PARTIAL -> Phenotype fit = "match", full stop, whether
     the underlying coverage was full or partial. Write the justification
-    sentence naming the matched cluster (e.g. "match — epilepsy/autism
-    cluster confirmed per PRIOR REASONING; evidence silent on the patient's
-    other cluster(s)"). Do NOT write "mismatch" or "uncertain" in this case,
+    sentence naming the matched cluster (e.g. "match — cluster A confirmed per PRIOR REASONING; evidence silent on
+    the patient's other cluster(s)"). Do NOT write "mismatch" or "uncertain" in this case,
     and do NOT block PVS1's gate (2) below — a PARTIAL-coverage match still
     satisfies it. A patient's phenotype covering more ground than one gene's
     literature does is expected and normal, not a phenotype mismatch.
@@ -81,19 +80,11 @@ says "unknown", judge Phenotype fit from the evidence as before, unconstrained.
 
 HEDGED-LANGUAGE CHECK (mandatory, applies regardless of the backend block
 above — read the literature evidence's own wording, not just its verdict):
-A real, worked past failure: patient's phenotype was "visual impairment"; a
-gene's literature evidence explicitly stated its disease is intellectual
-disability + epilepsy + autism, then added "documented sensory abnormalities
-... suggest significant potential for visual processing deficits within the
-broader sensory phenotype" — and this hedge alone was read as "Phenotype fit:
-match", unlocking PVS1 and producing a Pathogenic call for the wrong gene.
 Phrases like "may indicate", "suggests potential for", "could plausibly
 include", "within the broader phenotype", "cannot be ruled out" are NOT an
 explicit phenotype match — they are the literature-summary tool's own
 inference, not a stated finding. If the evidence's own gene-disease
-description names a DIFFERENT core phenotype than the patient's (e.g.
-intellectual disability/epilepsy/autism vs. this patient's visual
-impairment), Phenotype fit is "mismatch" or "uncertain" — never "match" —
+description names a DIFFERENT core phenotype than the patient's, Phenotype fit is "mismatch" or "uncertain" — never "match" —
 regardless of any hedged bridging language layered on top. Only an
 explicitly, directly stated association between this gene/variant and the
 patient's actual presenting phenotype counts as "match".
@@ -107,9 +98,8 @@ phenotype entry, no GeneReviews human clinical description, and no ClinVar
 human-disease entry anywhere in the evidence — this gene has NO established
 human phenotype, and its intersection with this patient's actual (human)
 phenotype is zero by definition, no matter how mechanistically plausible the
-animal data reads (e.g. "knockout mice show a myopathy phenotype consistent
-with the patient's hypotonia" is not a human phenotype match — it is an
-animal phenotype the literature-summary tool is drawing a human parallel to).
+animal data reads (an animal-model phenotype the literature-summary tool
+draws a human parallel to is not a human phenotype match).
 In this case: Phenotype fit = "mismatch" (not "uncertain" — the absence of
 any human phenotype data is itself the determination, not a data gap to
 hedge on), do NOT apply PP4 under any justification, and do NOT apply PVS1
@@ -135,11 +125,10 @@ piece of gene-disease evidence for this gene is GWAS/association-study in
 shape — no GeneReviews/OMIM entry, no named syndrome, no case reports of
 patients carrying P/LP variants, no stated AD/AR/XL inheritance mode for a
 specific disease — treat this exactly like the animal-model-only case above:
-Phenotype fit = "mismatch", do NOT apply PP4, do NOT apply PVS1. A real past
-failure (illustrative — GENE_X standing in for whatever gene triggers this
-pattern): GENE_X's literature was almost entirely cardiovascular/metabolic
-GWAS hits, plus one study naming it "one of 11 genes associated with
-[a condition resembling the patient's phenotype]" (a multi-gene population-
+Phenotype fit = "mismatch", do NOT apply PP4, do NOT apply PVS1. A gene whose
+literature is only GWAS/population association, plus a multi-gene study
+listing it among genes associated with [a condition resembling the patient's
+phenotype] (a multi-gene population-
 association study, not a monogenic disease-gene finding) — accepted as
 sufficient for a patient with a generic presenting phenotype, producing a
 Pathogenic call (PVS1+PM2) for a single heterozygous LoF variant in a gene
@@ -177,13 +166,7 @@ alleles are present — a heterozygous de novo variant in an AR/XLR gene is
 still exactly one allele, and an AR/XLR condition still requires two. Do not
 let PS2 eligibility, or the fact that a de novo finding "would normally be
 sufficient" in a dominant gene, talk you into treating this variant as
-causative here. A real past failure to not repeat: a heterozygous de novo
-missense variant in a gene PRIOR REASONING had already determined to be
-Autosomal Recessive was instead described in the Inheritance check as
-belonging to "autosomal dominant motor neuron disease" with a "single hit...
-possible for dominant conditions" — silently re-deriving a different,
-friendlier gene mode than the one PRIOR REASONING already stated, specifically
-to justify not capping the score. Use PRIOR REASONING's stated gene
+causative here. Use PRIOR REASONING's stated gene
 inheritance mode as given; do not re-characterize, soften, or second-guess it
 here. If PRIOR REASONING says AR/XLR, it is AR/XLR for the purposes of this
 check regardless of what segregation pattern this specific variant shows.
@@ -191,13 +174,8 @@ check regardless of what segregation pattern this specific variant shows.
 THIS IS NOT ONLY A COMMENT-WRITING INSTRUCTION — IT MUST CHANGE THE SCORE:
 writing "insufficient data" in the Inheritance check field while still
 computing a normal ACMG points total and classification is a direct
-self-contradiction, and a real past failure to not repeat: a heterozygous
-nonsense variant in an AR-only gene, no second hit anywhere in the data, had
-its own Comment state "this finding alone is insufficient to confirm a
-diagnosis without further investigation for a compound heterozygous or
-homozygous partner variant" — immediately followed by "ACMG points: 11 →
-Pathogenic" one line above it, and that Pathogenic label was what the final
-synthesis stage read and reported as causative, completely ignoring the
+self-contradiction: the final synthesis stage reads the classification
+label, completely ignoring the
 Comment's own correct caveat right next to it. A downstream stage reads the
 classification LABEL, not your prose reasoning about it — a correct-sounding
 Comment does not override an incorrect number. Concretely, when this check
@@ -254,10 +232,7 @@ Use exactly this format:
 
 Before writing the line below, add up the point value of every criterion you
 just listed (the values you wrote next to each one, from the table below —
-not a number recalled from memory) and use that exact sum. A real past
-failure: a criteria list totalling PS3(+4)+PM2(+2)+PP4(+1) = 7 was followed
-by "ACMG points: 11" — a stale or double-counted total that didn't match its
-own criteria list. If your arithmetic doesn't match a number you were about
+not a number recalled from memory) and use that exact sum. If your arithmetic doesn't match a number you were about
 to write, the criteria list (or a point value in it) is wrong — fix that,
 never the other way around, and never let the total include a criterion
 that isn't listed above it.
@@ -265,7 +240,7 @@ that isn't listed above it.
 **Comment:** [2–3 sentences]
 
 ACMG criteria guidance (point value in brackets, per Tavtigian et al. 2020 Bayesian point system):
-- PVS1 [VeryStrong, +8]: Loss-of-function variant in a gene where LoF is a known disease mechanism. AUTOPVS1 VERDICT IS AUTHORITATIVE, NOT ADVISORY, WHEN PRESENT — check this BEFORE gate (1) below: if the "AUTOPVS1 EVIDENCE" block for this exact variant states "PVS1 applicable: False" (no flowchart/path/strength determined — this happens for variants AutoPVS1 examined and could not place on any LoF pathway, e.g. deep intronic changes outside the canonical ±1/2 splice positions), you MUST NOT apply PVS1 for this variant, full stop — do not re-derive eligibility yourself from a generic Type label (e.g. "splicing" covers everything from a canonical ±1/2 site to a deep intronic change AutoPVS1 already rejected) or from gene constraint (pLI/LOEUF); AutoPVS1 already performed the definitive per-variant splice-site/LoF-mechanism determination and concluded no qualifying pathway exists. A real past failure: a variant typed "splicing" at intron position -10 (not a canonical splice site) in a pLI=1.000 gene had its own AutoPVS1 block explicitly read "PVS1 applicable: False" with every other field (path/steps/strength) blank — yet PVS1 [VeryStrong, +8] was applied anyway, justified only as "supported by gene constraint and variant type," directly overriding AutoPVS1's own negative determination and turning a 3-point VUS into an 11-point Pathogenic false positive. When AutoPVS1 instead reports "PVS1 applicable: True" with a strength, that determination is likewise authoritative — use its stated strength rather than re-deriving your own. Only fall back to self-judging gate (1) below from the raw Type/HGVS fields when AutoPVS1 is absent entirely for this variant (gated off, e.g. non-LoF variant types it doesn't run on at all) — never when it ran and returned an explicit verdict.
+- PVS1 [VeryStrong, +8]: Loss-of-function variant in a gene where LoF is a known disease mechanism. AUTOPVS1 VERDICT IS AUTHORITATIVE, NOT ADVISORY, WHEN PRESENT — check this BEFORE gate (1) below: if the "AUTOPVS1 EVIDENCE" block for this exact variant states "PVS1 applicable: False" (no flowchart/path/strength determined — this happens for variants AutoPVS1 examined and could not place on any LoF pathway, e.g. deep intronic changes outside the canonical ±1/2 splice positions), you MUST NOT apply PVS1 for this variant, full stop — do not re-derive eligibility yourself from a generic Type label (e.g. "splicing" covers everything from a canonical ±1/2 site to a deep intronic change AutoPVS1 already rejected) or from gene constraint (pLI/LOEUF); AutoPVS1 already performed the definitive per-variant splice-site/LoF-mechanism determination and concluded no qualifying pathway exists. When AutoPVS1 instead reports "PVS1 applicable: True" with a strength, that determination is likewise authoritative — use its stated strength rather than re-deriving your own. Only fall back to self-judging gate (1) below from the raw Type/HGVS fields when AutoPVS1 is absent entirely for this variant (gated off, e.g. non-LoF variant types it doesn't run on at all) — never when it ran and returned an explicit verdict.
   Two independent gates, BOTH required whenever AutoPVS1 did not already resolve the question above:
   (1) THIS VARIANT'S OWN Type must itself be a LoF consequence (nonsense, frameshift, canonical ±1/2 splice site, initiation codon loss, or a deletion removing critical exons/whole gene) — check the Type/HGVS fields directly. "GNOMAD GENE CONSTRAINT" (pLI/LOEUF) is GENE-level evidence about whether the gene tolerates LoF in general — it can support that LoF is a plausible mechanism for the gene, but a high pLI/low LOEUF NEVER by itself makes a non-LoF variant (missense, synonymous, etc.) eligible for PVS1. If Type is not LoF, do not apply PVS1 regardless of how LoF-intolerant the gene is.
   (2) Phenotype fit above must be "match" — a LoF mechanism alone does not justify PVS1 if the gene is not linked to the patient's phenotype (Phenotype fit "mismatch" or "uncertain"). If phenotype fit is not a match, do not apply PVS1 regardless of AutoPVS1 strength; note the mechanism as unconfirmed disease relevance instead. Per the PHENOTYPE PERTINENCE CHECK above, a PARTIAL verdict from the backend PHENOTYPE CLUSTER MATCH block still counts as "match" here — do not re-impose a full-coverage requirement at this gate that the Phenotype fit line above already resolved.
@@ -293,8 +268,8 @@ ACMG criteria guidance (point value in brackets, per Tavtigian et al. 2020 Bayes
     - SpliceAI (delta score): ≥0.5 supports a splice-altering effect; <0.2 does not.
   Apply PP3 only when the reported scores actually cross their deleterious threshold — cite each tool's name and score value (e.g. "REVEL=0.82, CADD=28.3") alongside the judgment. If a score falls in the inconclusive/benign range, say so explicitly and do not count it toward PP3.
 - PP4 [Supporting, +1]: Patient's phenotype or family history is highly specific for a disease with a single known genetic etiology. Three conditions must ALL hold — do not apply PP4 on any one or two alone:
-  (1) Single-gene etiology: the evidence indicates this disease/phenotype is caused by variants in ONE gene (not genetically heterogeneous — i.e. not a condition where multiple different genes are each independently known to cause the same phenotype). If the evidence shows or does not rule out genetic heterogeneity, do NOT apply PP4 — state the heterogeneity explicitly instead. A real past failure to not repeat: PP4 was applied for a GENE_X variant in a patient with "condition Y and an affected mother" reasoning "specific for condition Y caused by GENE_X variants" — but condition Y is a genetically HETEROGENEOUS disease (GENE_X causes most cases, but two other genes independently cause the identical phenotype too) — condition (1) fails here regardless of how classic the phenotype looks, and PP4 should not have been applied. Before applying PP4, actively check whether the evidence names other genes for the same disease (as this pipeline's own gene evidence table often does, by listing multiple candidate genes for the same phenotype in one run) — if it does, that alone rules out single-gene etiology.
-  (2) Discriminating specificity: the patient's phenotype must include at least one feature that is itself a recognized hallmark of this specific disease, not merely a generic symptom this disease happens to share with many other conditions. A broad, non-discriminating overlap (e.g. "intellectual disability", "developmental delay", "seizures", "short stature" in isolation) is NOT sufficient — those are common to hundreds of syndromes and do not distinguish this disease from its differentials. Example of a genuinely specific match: micropenis in a patient being evaluated for Kallmann syndrome — micropenis reflects the congenital hypogonadotropic hypogonadism that defines Kallmann and is not an incidental or generic finding. Name the exact feature(s) driving the match and state explicitly why they are distinctive for this disease rather than merely present in it. If the only overlap is nonspecific/generic features, do NOT apply PP4 — say so explicitly instead of applying it on general plausibility.
+  (1) Single-gene etiology: the evidence indicates this disease/phenotype is caused by variants in ONE gene (not genetically heterogeneous — i.e. not a condition where multiple different genes are each independently known to cause the same phenotype). If the evidence shows or does not rule out genetic heterogeneity, do NOT apply PP4 — state the heterogeneity explicitly instead. Before applying PP4, actively check whether the evidence names other genes for the same disease (as this pipeline's own gene evidence table often does, by listing multiple candidate genes for the same phenotype in one run) — if it does, that alone rules out single-gene etiology.
+  (2) Discriminating specificity: the patient's phenotype must include at least one feature that is itself a recognized hallmark of this specific disease, not merely a generic symptom this disease happens to share with many other conditions. A broad, non-discriminating overlap (a generic symptom category in isolation) is NOT sufficient — those are common to hundreds of syndromes and do not distinguish this disease from its differentials. Name the exact feature(s) driving the match and state explicitly why they are distinctive for this disease rather than merely present in it. If the only overlap is nonspecific/generic features, do NOT apply PP4 — say so explicitly instead of applying it on general plausibility.
   (3) Full coverage: read the "PHENOTYPE CLUSTER MATCH (backend-extracted from Stage 1 reasoning — authoritative, do not re-derive)" block above. PP4 may only be applied when that verdict is YES. A verdict of PARTIAL means the gene's own literature explains only one cluster of the patient's phenotype and is silent on the rest — that silence is fine for keeping the variant in the report and for PVS1/inclusion purposes (PARTIAL is treated as a sufficient positive link there), but it means the phenotype match is, by definition, not "highly specific" for what this particular patient actually has; a partial match cannot carry PP4 no matter how hallmark-like the matched feature is on its own. Do NOT apply PP4 when the verdict is PARTIAL, NO, or UNKNOWN — only YES satisfies this condition. (If an older-format input has no such backend block at all and phenotype fit must be judged unconstrained from the narrative, apply this same logic to that judgment: only an essentially-complete match satisfies condition (3), not a match to one cluster of a multi-cluster phenotype.)
 
      If the CLINICAL REASONING above includes a "CLUSTER MATCH:" line, start
@@ -307,14 +282,13 @@ ACMG criteria guidance (point value in brackets, per Tavtigian et al. 2020 Bayes
      condition (2) asks the stricter question of whether that SAME named
      feature is itself a hallmark distinguishing this disease from its
      differentials, or just a generic finding the CLUSTER MATCH happened to
-     key on (e.g. a named feature of "developmental delay" or "intellectual
-     disability" passes CLUSTER MATCH but still fails condition (2) here, per
-     the disqualifying examples above). Condition (3) above is a separate,
+     key on (a generic symptom category passes CLUSTER MATCH but still fails
+     condition (2) here). Condition (3) above is a separate,
      independent gate on top of this — a feature can pass condition (2)'s
      specificity test and still fail PP4 outright on condition (3) if
      COVERAGE is SUBSET.
 
-  A real past failure to not repeat: the patient's phenotype input was the single generic term "intellectual disability" and PP4 was applied anyway with the justification "a core feature of the [GENE]-associated syndromic neurodevelopmental disorder" — this is circular (every candidate gene in the whole run shares this same generic phenotype; being a "core feature" of a broad syndrome name is not the same as being a discriminating feature) and directly violates this condition's own listed example. A second, near-identical recurrence to also not repeat: the input was "intellectual disability. father and mother unaffected" and PP4 was applied again with the same reasoning — segregation/pedigree facts (parents affected/unaffected, family history of the SAME condition, consanguinity) are NOT clinical/phenotypic features and do NOT count toward condition (2)'s discriminating-feature requirement; they inform inheritance model (de novo vs. inherited) but say nothing about what disease this patient has. Before applying PP4, strip out any segregation/pedigree wording from the phenotype input and check what's left: if what remains is ONLY a generic disease-category term ("intellectual disability", "developmental delay", "seizures", "short stature", etc., alone or in combination with each other) with no actual distinguishing clinical finding, condition (2) fails by construction — do not apply PP4 for ANY gene in that run on phenotype grounds, no matter how strong the gene-disease literature link otherwise looks. PP4 needs a specific clinical finding to point to; a generic diagnosis label plus a pedigree fact is still not one.
+  Before applying PP4, strip out any segregation/pedigree wording from the phenotype input and check what's left: if what remains is ONLY generic disease-category terms (alone or in combination with each other) with no actual distinguishing clinical finding, condition (2) fails by construction — do not apply PP4 for ANY gene in that run on phenotype grounds, no matter how strong the gene-disease literature link otherwise looks. PP4 needs a specific clinical finding to point to; a generic diagnosis label plus a pedigree fact is still not one.
   Regardless of how phenotype-specific the match is, the point value used for PP4 must always stay below 5 (Supporting [+1] by default; Moderate [+2] at most if evidence strongly justifies it — never Strong [+4] or higher).
 - BA1 [Standalone Benign, -8]: Allele frequency > 5% in population databases.
 - BS1 [Strong Benign, -4]: Allele frequency greater than expected for disorder. This requires an explicit comparison between this variant's Frequency and a stated disease prevalence/expected-carrier-frequency figure — the evidence above generally does NOT contain disease-prevalence data (no tool in this pipeline fetches it), so BS1 will usually have no valid grounding and should NOT be applied. Do not apply BS1 merely because the frequency "seems too common" for a rare disease, or from gene/disease familiarity — that is a plausibility judgment, not cited evidence. Only apply if the evidence above explicitly states a disease prevalence or expected-frequency figure to compare against.
@@ -323,7 +297,7 @@ ACMG criteria guidance (point value in brackets, per Tavtigian et al. 2020 Bayes
   (2) PENETRANCE GATE (mandatory — check before applying, this is the difference between a real BS2 finding and a false one): if the RETRIEVED evidence above explicitly documents, with a citable source (PMID/URL), incomplete/reduced penetrance for THIS gene or condition, an age-dependent onset the unaffected carrier hasn't yet reached, or mosaicism as a known phenomenon for this gene, do NOT apply BS2 at all — an unaffected carrier is the expected, uninformative outcome under any of those, not evidence against pathogenicity. A real worked example (do not repeat the wrong version): literature evidence discussed a related paralog gene as having "incomplete penetrance", and explicitly did NOT make that same claim for the candidate gene itself — that absence of a stated penetrance caveat for the candidate gene (as opposed to it being silent on penetrance generally) is what makes an unaffected carrier parent meaningfully unusual enough to apply BS2, since the gene's own literature otherwise frames its pathogenic variants as typically causing disease.
   CRITICAL — SPECULATION IS NOT A PENETRANCE CITATION: a real past failure to not repeat: the evidence stated the gene's LoF variants typically arise de novo (with a citable PMID), the father was documented as an unaffected carrier of the same variant, and instead of applying BS2 the model wrote "the variant retains its Pathogenic classification... despite the discordant inheritance pattern suggesting potential reduced penetrance or phenocopy in the father" — inventing "reduced penetrance" as an in-the-moment explanation for the discordance, with no citation, then using that self-invented explanation as an excuse to skip BS2 entirely. This is backwards and is a HARD ERROR: the model does not get to hypothesize reduced penetrance or phenocopy on the spot to explain away an unaffected carrier — that hypothesis must already exist as a citable finding in the retrieved evidence (per the worked example above) to exempt BS2. An unaffected-carrier discordance with NO pre-existing citable penetrance/phenocopy explanation is precisely what BS2 exists to capture — apply it. If the evidence is completely silent on penetrance for this specific gene (neither confirms full penetrance nor documents reduced penetrance, and no related-gene contrast is available either), you MUST still apply BS2 (not skip it), and simply flag the penetrance uncertainty in the Comment rather than treating full penetrance as a given.
   HOMOZYGOUS PARENT IS A STRONGER VERSION OF THIS SAME SIGNAL, NEVER "ABSENT": if a parent's Allelic_balance is ~1.0 (roughly ≥0.8), that parent is HOMOZYGOUS for this exact variant — not wild-type, not "absent," not a de novo-supporting negative parent, regardless of how high or low the proband's own AB is. Read the raw number: an AB near 0 means the parent does not carry the variant; an AB near 0.5 means a heterozygous carrier; an AB near 1.0 means a homozygous carrier — these three read in the OPPOSITE direction from "closer to 1.0 = more wild-type," which is a real, documented misreading to never repeat. A homozygous unaffected parent for a variant being evaluated under a dominant/AD-relevant mechanism is BS2 evidence at least as strong as a heterozygous unaffected carrier (arguably stronger — a true dominant/haploinsufficiency mechanism would be expected to manifest at least as severely in a homozygote as in a heterozygote, so an unaffected homozygous parent is a more striking discordance, not a lesser one). Apply BS2 under the same DEFAULT-UNAFFECTED POLICY and PENETRANCE GATE above.
-  HARD GATE — PS2 IS BANNED IN THIS SECTION AND A NON-ABSENT PARENT AB CAN NEVER SUPPORT IT ANYWAY: this base-conclusion template already forbids applying PS2 here (see the note near the top of this prompt — de novo status is computed only at the MOI layer stage from this same parental data). A real past failure to not repeat, stacking both errors at once: a variant with Allelic_balance_mother=0 and Allelic_balance_father=1.00 was written up with "PS2 [Strong, +4]: De novo variant confirmed by testing of parents (mother AB=0, father AB=1.00)" — treating the father's AB=1.00 as if it were an absent/negative parent, when AB=1.00 is the single clearest possible signal that the father carries (and is homozygous for) the exact variant in question. This is not a borderline misread; PS2 categorically requires BOTH parents to show absence (AB near 0), and this base-conclusion template is not the place to apply PS2 regardless. The correct write-up recognizes the father as a homozygous carrier and evaluates BS2 (per the paragraph above), not PS2. Before writing any segregation-related criterion here, check both parental AB values against the absent/het/hom bands (near 0 / near 0.5 / near 1.0) and never describe a non-"NA", non-near-zero parental AB as "absent," "negative," "wild-type," or supportive of a de novo claim.
+  HARD GATE — PS2 IS BANNED IN THIS SECTION AND A NON-ABSENT PARENT AB CAN NEVER SUPPORT IT ANYWAY: this base-conclusion template already forbids applying PS2 here (see the note near the top of this prompt — de novo status is computed only at the MOI layer stage from this same parental data). Before writing any segregation-related criterion here, check both parental AB values against the absent/het/hom bands (near 0 / near 0.5 / near 1.0) and never describe a non-"NA", non-near-zero parental AB as "absent," "negative," "wild-type," or supportive of a de novo claim.
   This is independent of PS2/PM6 (de novo confirmation, computed separately at the MOI layer stage from the same parental data) — BS2 concerns the opposite scenario: a variant INHERITED from a parent who is unaffected, not one confirmed absent in both parents.
 - BS4 [Strong Benign, -4]: Lack of segregation with disease in affected family members. Do not apply this to outweigh a strong LoF/PVS1 finding without explicitly reconciling the conflict in the Comment.
 - BP6 [Supporting, -1]: A reputable source (ClinVar) reports THIS variant's own classification as Likely benign or Benign. Apply from the **ClinVar:** field above (i.e. this variant's own ClinVar_class, not a different variant/residue) reading Likely benign or Benign. Unlike BS3/PS3, BP6 does NOT require functional-study data — the classification label itself is sufficient grounding; do not withhold BP6 merely because no functional evidence is cited, that is the entire point of this criterion (a reputable source's call, taken on trust, precisely when independent functional evaluation is unavailable). Do not apply if ClinVar_class is Uncertain significance, Pathogenic, Likely pathogenic, or "Conflicting interpretations" (including any Conflicting classification that contains a P/LP submission) without explicitly addressing the conflict in the Comment — a genuinely conflicted record is not a reputable unambiguous benign call.

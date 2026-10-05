@@ -152,17 +152,38 @@ class LofMechanismTool:
         return "\n".join(lines)
 
     def _abstracts(self, gene: str) -> dict[str, str]:
+        """Top MAX_ABSTRACTS mechanism abstracts for `gene`. A preprint that
+        PubMed links to its published version ("Update in") is replaced by
+        that version: dropped when the version is already in the pool, else
+        the version is fetched in its place. Real observed failure: a preprint
+        claimed gain of function that its journal version revised to loss of
+        function for most variants, and the model quoted the preprint."""
         term = f"{gene}[tiab] AND {_MECH_TERMS}[tiab]"
         try:
             ids = _ncbi_get("esearch.fcgi", {"db": "pubmed", "term": term, "retmax": MAX_ABSTRACTS,
                                              "sort": "relevance", "retmode": "json"}).json()["esearchresult"]["idlist"]
             if not ids:
                 return {}
-            root = ET.fromstring(_ncbi_get("efetch.fcgi", {"db": "pubmed", "id": ",".join(ids),
-                                                           "retmode": "xml"}).text)
+            out, update_in = self._fetch(ids)
+            missing = sorted({u for p, u in update_in.items() if u not in out})
+            if missing:
+                out.update(self._fetch(missing)[0])
         except Exception as e:
             raise ToolFetchError(f"PubMed mechanism search failed for {gene}: {e}") from e
-        out = {}
+        for preprint, version in update_in.items():
+            if version in out:
+                logger.info("[LofMechanism] %s: preprint PMID:%s replaced by its published version PMID:%s",
+                            gene, preprint, version)
+                out.pop(preprint, None)
+        return out
+
+    @staticmethod
+    def _fetch(ids: list[str]) -> tuple[dict[str, str], dict[str, str]]:
+        """({pmid: title + abstract}, {preprint pmid: pmid of its published
+        version}) for the PubMed records `ids`."""
+        root = ET.fromstring(_ncbi_get("efetch.fcgi", {"db": "pubmed", "id": ",".join(ids),
+                                                       "retmode": "xml"}).text)
+        out, update_in = {}, {}
         for art in root.iter("PubmedArticle"):
             pmid = art.findtext(".//PMID")
             title_el = art.find(".//ArticleTitle")
@@ -170,4 +191,7 @@ class LofMechanismTool:
             abstract = " ".join("".join(a.itertext()) for a in art.findall(".//AbstractText"))
             if pmid and abstract:
                 out[pmid] = f"{title}\n{abstract}"
-        return out
+                version = art.findtext(".//CommentsCorrections[@RefType='UpdateIn']/PMID")
+                if version:
+                    update_in[pmid] = version
+        return out, update_in

@@ -12,8 +12,8 @@ might matter to any particular patient (none is described here and none
 should be assumed), and do not omit a condition because it seems minor,
 common, historical, or unrelated to another condition also named in the
 evidence. If the evidence names two, three, or more entirely different
-conditions for this gene (e.g. a rare neurodevelopmental syndrome AND,
-separately, a common adult metabolic/cardiac/cancer trait), list ALL of
+conditions for this gene (e.g. a rare syndrome AND, separately, an
+unrelated common trait), list ALL of
 them — every one is part of this inventory regardless of how different they
 are from each other. Copy each condition name verbatim from the source text
 (the GeneReviews/OMIM/CGD condition name, or the disease name as stated in a
