@@ -590,6 +590,9 @@ def _criteria_section(base_conclusion: str) -> tuple[str, bool]:
     return base_conclusion[start:end], has_heading
 
 
+_MOI_ONLY_CODES = frozenset({"PS2", "PM6", "PP1"})
+
+
 def extract_base_acmg(base_conclusion: str) -> tuple[str, float] | None:
     """
     Pulls the applied ACMG criteria out of a variant's own Stage-4
@@ -643,7 +646,16 @@ def extract_base_acmg(base_conclusion: str) -> tuple[str, float] | None:
 
     bullets = []
     kept: dict[str, float] = {}
+    dropped = 0.0
     for n, c in enumerate(found):
+        # PS2/PM6 (de novo) and PP1 (cosegregation) belong to the MOI layers,
+        # which add them as their own delta. conclusion.txt bans them in the
+        # base, but the SLM still writes them; kept here they were summed
+        # twice (base + layer delta, e.g. CHD2 trio 16 → 20 pts).
+        if c.code in _MOI_ONLY_CODES:
+            logger.warning("acmg_points.extract_base_acmg: dropped MOI-only %s from base criteria", c.code)
+            dropped += c.points
+            continue
         if c.code in kept:
             if kept[c.code] != c.points:
                 logger.warning(
@@ -663,7 +675,7 @@ def extract_base_acmg(base_conclusion: str) -> tuple[str, float] | None:
     points = sum(kept.values())
     if not has_heading:
         logger.warning("acmg_points.extract_base_acmg: no 'ACMG criteria' heading — read criteria with point tags from the whole conclusion.")
-    if stated is not None and stated != points:
+    if stated is not None and stated - dropped != points:
         logger.warning(
             "acmg_points.extract_base_acmg: conclusion states %s pts, its criteria sum to %s — using %s. Raw conclusion:\n%s",
             _sum_str(stated), _sum_str(points), _sum_str(points), base_conclusion[:4000],

@@ -70,9 +70,15 @@ def split_condition_list(phenotype_list: str) -> list[str]:
     return names
 
 
-def _fetch(name: str) -> tuple[str, list[str]] | None:
+def _fetch(name: str, gene: str) -> tuple[str, list[str]] | None:
+    # Always restricted to MedGen concepts linked to the gene: a name-only search
+    # returned other genes' diseases (observed: "Rett syndrome" -> FOXG1 disorder,
+    # a generic DEE name -> a DEE subtype of another gene), so the patient was
+    # compared against the wrong disease's features.
+    if not gene:
+        return None
     ids: list[str] = []
-    for term in (f'"{name}"[title]', name):
+    for term in (f'"{name}"[title] AND {gene}[gene]', f'({name}) AND {gene}[gene]'):
         ids = _ncbi_get(
             "esearch.fcgi",
             {"db": "medgen", "term": term, "retmode": "json", "retmax": _MAX_HITS},
@@ -91,26 +97,27 @@ def _fetch(name: str) -> tuple[str, list[str]] | None:
         rec = result.get(uid, {})
         feats = _FEATURE_RE.findall(html.unescape(rec.get("conceptmeta", "")))
         hits.append((rec.get("title", ""), list(dict.fromkeys(feats))[:_MAX_FEATURES]))
-    # Prefer an exact-title hit with features, then any hit with features.
+    # Exact-title hit with features, else the only hit (if it has features);
+    # several non-exact hits are ambiguous -> None (judged by name only).
     for title, feats in hits:
         if feats and title.strip().lower() == name.lower():
             return title, feats
-    for title, feats in hits:
-        if feats:
-            return title, feats
+    if len(hits) == 1 and hits[0][1]:
+        return hits[0]
     return None
 
 
-def condition_features(name: str) -> tuple[str, list[str]] | None:
-    """(MedGen title, clinical feature names) for a condition name, or None."""
-    key = name.strip().lower()
+def condition_features(name: str, gene: str) -> tuple[str, list[str]] | None:
+    """(MedGen title, clinical feature names) for a condition name among the
+    MedGen concepts linked to the gene, or None."""
+    key = f"{gene.strip().upper()}|{name.strip().lower()}"
     with _lock:
         if key in _cache:
             return _cache[key]
     try:
-        value = _fetch(name)
+        value = _fetch(name, gene)
     except Exception as e:
-        logger.warning("[MedGen] feature lookup failed for %r: %s", name, e)
+        logger.warning("[MedGen] feature lookup failed for %r (%s): %s", name, gene, e)
         return None  # not cached: a transient failure may succeed next time
     with _lock:
         _cache[key] = value

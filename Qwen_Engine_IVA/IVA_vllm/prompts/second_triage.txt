@@ -183,16 +183,13 @@ INCLUDE requires evidence for BOTH:
      (backend-determined)" block above — never from a mode claimed in prose
      evidence (a PubMed/websearch summary, a quoted OMIM sentence, or the
      CLINICAL REASONING narrative), any of which can misstate or conflict with
-     the backend-resolved mode. If that block reads AR or XLR: a single
-     heterozygous LoF variant with no second hit (no compound het, not
-     homozygous) is INSUFFICIENT on its own — treat as weak evidence, not
-     strong. If it reads AD, XLD, AD_AR, XLD_XLR, or UNDEFINED (no inheritance
-     signal in CSV field, CGD table, or retrieved evidence) — do NOT invoke this
-     recessive-insufficiency reasoning at all, even if some other part of the
-     evidence text calls the gene "autosomal recessive"; a rare heterozygous
-     variant with strong functional impact stands on its own signal strength.
-     UNDEFINED is not a default to recessive — treat it as no mode constraint
-     applying to this check, OR
+     the backend-resolved mode. If that block reads AR: a single heterozygous
+     variant with no second hit (no compound het, not homozygous) is never an
+     INCLUDE — see the EXCLUDE rule for single heterozygous variants below. If it
+     reads AD, XLD, AD_AR or XLD_XLR — do NOT invoke recessive-insufficiency
+     reasoning at all, even if some other part of the evidence text calls the
+     gene "autosomal recessive"; a rare heterozygous variant with strong
+     functional impact stands on its own signal strength, OR
    - Variant is homozygous, or compound heterozygous with a second variant in the
      same gene, in a known recessive gene with low population frequency, OR
      the variant is a loss-of-function type (frameshift, nonsense, canonical
@@ -270,42 +267,7 @@ otherwise support pathogenicity. Evaluate what IS present before deciding; note
 what's missing as a caveat in the Include-case/Exclude-case text, not as the
 deciding factor.
 
-Output exactly three lines and nothing else:
-Include-case: <strongest reason to include, ≤15 words>
-Exclude-case: <strongest reason to exclude, ≤15 words>
-Decision: INCLUDE or EXCLUDE
-
-Example output (strong case — known gene, LoF):
-Include-case: OMIM gene for phenotype; PVS1 VeryStrong nonsense variant
-Exclude-case: no variant-level functional data beyond prediction
-Decision: INCLUDE
-
-Example output (included — VUS but strong signals):
-Include-case: known LCA gene; homozygous VUS, very low AF, high CADD
-Exclude-case: ClinVar VUS, no functional study for this specific variant
-Decision: INCLUDE
-
-Example output (included — de novo missense outranks unresolved recessive het):
-Include-case: confirmed de novo missense (PS2), gene matches phenotype exactly
-Exclude-case: no ClinVar entry, prediction-only evidence
-Decision: INCLUDE
-
-Example output (excluded — single het LoF in recessive gene, no second hit):
-Include-case: rare LoF variant, CADD 32
-Exclude-case: heterozygous only in AR gene, no second variant, no compound-het evidence
-Decision: EXCLUDE
-
-Example output (excluded — missing gene link):
-Include-case: variant rare and predicted damaging by CADD
-Exclude-case: no gene-disease link for this phenotype; gene unrelated
-Decision: EXCLUDE
-
-Example output (excluded — common variant, no signal):
-Include-case: gene has some OMIM disease association
-Exclude-case: AF 3%, CADD 8, ClinVar Benign, no LoF mechanism
-Decision: EXCLUDE
-
-Example output (excluded — keyword-overlap literature, low-confidence ClinVar):
-Include-case: single-submitter no-criteria ClinVar Pathogenic label
-Exclude-case: literature link is tangential (unrelated disease mentions shared symptom word), gene LoF-tolerant, no real gene-phenotype relationship
-Decision: EXCLUDE
+Answer as a JSON object:
+- "include_case": the strongest reason to include, 15 words or fewer.
+- "exclude_case": the strongest reason to exclude, 15 words or fewer.
+- "decision": exactly "INCLUDE" or exactly "EXCLUDE".

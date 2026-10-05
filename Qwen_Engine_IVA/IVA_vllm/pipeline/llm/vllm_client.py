@@ -58,6 +58,7 @@ class VLLMClient(LLMClient):
         temperature: float = 0.0,
         enable_thinking: bool = False,  # silently ignored — always False
         repetition_penalty: float = 1.0,
+        json_schema: dict | None = None,
     ) -> str:
         messages = [
             {"role": "system", "content": system},
@@ -72,6 +73,11 @@ class VLLMClient(LLMClient):
         }
         if repetition_penalty != 1.0:
             payload["repetition_penalty"] = repetition_penalty
+        if json_schema is not None:
+            payload["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {"name": "answer", "schema": json_schema},
+            }
         _retries = 2
         _backoff  = 15.0
         for attempt in range(_retries + 1):

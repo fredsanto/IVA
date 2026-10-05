@@ -122,7 +122,10 @@ class HFClient(LLMClient):
         temperature: float = 0.0,
         enable_thinking: bool = False,  # silently ignored — always False
         repetition_penalty: float = 1.0,
+        json_schema: dict | None = None,
     ) -> str:
+        if json_schema is not None:
+            raise NotImplementedError("HFClient has no constrained decoding — use the vLLM client.")
         messages = [
             {"role": "system", "content": system},
             {"role": "user",   "content": user},

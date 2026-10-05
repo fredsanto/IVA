@@ -1,48 +1,10 @@
-   - Single heterozygous variant (any consequence) in a gene whose ONLY reported
-     mode is AUTOSOMAL RECESSIVE (or XLR) — no dominant mechanism reported at
-     all — with no second hit and no compound-het evidence: insufficient for
-     disease causation under a purely recessive model. Per the HARD GATE below,
-     this rule requires Zygosity to say heterozygous (stated or derived) — it
-     can NEVER be applied when Zygosity says homozygous/hemizygous. Do NOT
-     apply this to a gene reported as AD_AR, XLD_XLR, or otherwise
-     dual/uncertain-mode — for those, the heterozygous variant may still be
-     sufficient under the AD reading alone (see INHERITED FROM AN AFFECTED
-     PARENT above), so evaluate it as a potential dominant finding rather than
-     excluding it on recessive grounds just because the gene has also been
-     reported as AR somewhere, OR
-
-HARD GATE — READ ZYGOSITY BEFORE APPLYING THE "SINGLE HETEROZYGOUS VARIANT
-INSUFFICIENT" EXCLUDE RULE ABOVE:
-   Check the variant's Zygosity value in VARIANT DATA above (this may be a
-   stated value from the input, e.g. "hom"/"Homozygous", or a value the
-   pipeline itself derived from allelic balance when no Zygosity column
-   existed, i.e. "Homozygous (derived from AB=<value>; ...)" — treat both the
-   same way; a derived call is still a zygosity call, not an absence of one).
-   - If Zygosity says HOMOZYGOUS (or hemizygous, for an X-linked gene in a
-     male) in any form: the "single heterozygous variant insufficient"
-     EXCLUDE rule above CANNOT be used — a homozygous/hemizygous genotype IS
-     the second hit; there is no "single variant, no second hit" scenario to
-     invoke. Do not write an exclude-case that mentions zygosity, a second
-     hit, or compound-het status for this variant. The ONLY valid grounds to
-     EXCLUDE a stated/derived-homozygous variant are gene-phenotype link or
-     pathogenicity evidence — never zygosity/second-hit reasoning.
-   - The single-heterozygous-variant EXCLUDE rule applies ONLY when Zygosity
-     is explicitly heterozygous (stated or derived) — never when Zygosity is
-     simply "NA"/absent. Missing zygosity is a data gap (note it as a
-     caveat), not proof of heterozygosity, and is not by itself grounds to
-     invoke this rule either.
-   - CONFIRMED DE NOVO ALSO BYPASSES THIS RULE — including for X-linked genes.
-     If ALLELIC BALANCE data shows the variant absent in both parents (or one
-     parent untested), a heterozygous call on an X-linked gene must NOT be
-     EXCLUDEd with reasoning like "single heterozygous call in an X-linked
-     gene; insufficient for hemizygous disease." De novo status is itself the
-     strong pathogenicity/causation signal (see PS2/PM6 above) — it does not
-     additionally require the zygosity to read as hemizygous, and "hemizygous"
-     is a male-only genotype label that does not apply at all to a female
-     proband, whose true, fully causative genotype for an X-linked de novo
-     event IS heterozygous. Do not infer proband sex backwards from the gene
-     being X-linked (e.g. "must be male because the gene is X-linked") — sex
-     is not established by the zygosity read alone, and several X-linked
-     genes are well documented to cause disease in heterozygous females.
-     Never EXCLUDE a confirmed-de-novo variant on hemizygous/zygosity-mismatch
-     grounds; evaluate it under the DE NOVO pathogenicity signal instead.
+   - SINGLE HETEROZYGOUS VARIANT IN AN AUTOSOMAL RECESSIVE GENE — ALWAYS EXCLUDE.
+     When the GENE INHERITANCE MODE block above reads AR, Zygosity is
+     heterozygous, and no second variant in the same gene is shown (no SIBLING
+     VARIANT block), the patient is only a carrier: one allele cannot cause a
+     recessive disease. Decide EXCLUDE, and write as the exclude-case:
+     "single heterozygous variant discarded because the gene is autosomal recessive".
+     Nothing overrides this rule — not a loss-of-function type, not a ClinVar
+     Pathogenic entry, not a high CADD score, not a phenotype match, not de novo
+     status. It does not apply when the mode reads AD_AR (a heterozygous variant
+     may act dominantly there) or when Zygosity is homozygous, OR

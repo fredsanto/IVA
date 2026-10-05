@@ -50,16 +50,14 @@ Rules:
 
 6. Every YES must copy, word for word, the sentence or clause of the EVIDENCE
    above that states it. Copy it from the evidence only — never write your own
-   wording. A YES whose quote is not found in the evidence is discarded.
+   wording. A YES without a quote is not counted; every quote is checked
+   against the evidence.
 
-Output exactly this format — 2 to 4 sentences of reasoning, then the five
-mode lines, each on its own line, nothing after them:
-
-Reasoning: <2-4 sentences naming the source(s) you relied on, a
-dominant-negative/haploinsufficiency mechanism if the evidence discusses one,
-and how pLI/LOEUF factored in if at all>
-Dominant: YES "<sentence copied from the evidence>" | NO
-Recessive: YES "<sentence copied from the evidence>" | NO
-X-linked recessive: YES "<sentence copied from the evidence>" | NO
-X-linked dominant: YES "<sentence copied from the evidence>" | NO
-X-linked unspecified: YES "<sentence copied from the evidence>" | NO
+Answer as a JSON object:
+- "reasoning": 2-4 sentences naming the source(s) you relied on, a
+  dominant-negative/haploinsufficiency mechanism if the evidence discusses one,
+  and how pLI/LOEUF factored in if at all.
+- "dominant", "recessive", "x_linked_recessive", "x_linked_dominant",
+  "x_linked_unspecified": each with "answer" — exactly "YES" or exactly "NO" —
+  and "quote" — for YES, the sentence copied from the evidence; for NO, an
+  empty string.

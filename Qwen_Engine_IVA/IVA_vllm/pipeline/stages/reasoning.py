@@ -8,19 +8,20 @@ by separating the evidence-grounded narrative from the inclusion decision:
                        Prompt: prompts/reasoning.txt
   Call 2 — second_triage: structured INCLUDE/EXCLUDE decision with justification.
                            Prompt: prompts/second_triage.txt
-                           Format: Include-case / Exclude-case / Decision (3 lines)
+                           Format: JSON {include_case, exclude_case, decision},
+                           decision constrained to INCLUDE|EXCLUDE at decoding time
 
 The two outputs are concatenated before returning so that the REASONING display
 section in pipeline.py is self-contained.
 
 Public API:
     run_one(variant_context, llm) -> str
-    parse_inclusion_decision(reasoning_text) -> tuple[str, str]
-        Returns ("INCLUDE"|"EXCLUDE", "Include: <...> | Exclude: <...>").
+    run_second_triage(...) -> (combined, "INCLUDE"|"EXCLUDE", "Include: <...> | Exclude: <...>")
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from pathlib import Path
@@ -60,9 +61,15 @@ MAX_NEW_TOKENS_REASONING = 1500
 # 200 gives headroom for any residual preamble before the 3 structured lines.
 MAX_NEW_TOKENS_SCORING   = 200
 
-_INCLUDE_CASE_RE = re.compile(r"Include-case:\s*(.+)", re.IGNORECASE)
-_EXCLUDE_CASE_RE = re.compile(r"Exclude-case:\s*(.+)", re.IGNORECASE)
-_DECISION_RE     = re.compile(r"Decision:\s*(INCLUDE|EXCLUDE)", re.IGNORECASE)
+_DECISION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "include_case": {"type": "string"},
+        "exclude_case": {"type": "string"},
+        "decision": {"type": "string", "enum": ["INCLUDE", "EXCLUDE"]},
+    },
+    "required": ["include_case", "exclude_case", "decision"],
+}
 _CLUSTER_MATCH_RE = re.compile(
     r"CLUSTER_PHENOTYPE:\s*(YES|PARTIAL|NONE|INCIDENTAL|EXCLUDED)", re.IGNORECASE
 )
@@ -166,7 +173,7 @@ def run_gene_phenotype_extraction(evidence_context: str, llm: "LLMClient") -> st
 
 
 def run_phenotype_overlap(
-    patient_phenotype: str, phenotype_list: str, llm: "LLMClient",
+    patient_phenotype: str, phenotype_list: str, gene: str, llm: "LLMClient",
 ) -> tuple[str | None, str]:
     """
     Isolated SLM call: compares the patient's phenotype against the gene's
@@ -198,7 +205,7 @@ def run_phenotype_overlap(
         return None, ""
     lines = []
     for name in names:
-        hit = condition_features(name)
+        hit = condition_features(name, gene)
         if hit:
             title, feats = hit
             lines.append(f"- {name} (MedGen: {title}) — features: {', '.join(feats)}")
@@ -315,67 +322,6 @@ def _load_literature_evidence_quality_block() -> str:
     )
 
 
-# ── Score parser ──────────────────────────────────────────────────────────────
-
-def parse_inclusion_decision(reasoning_text: str) -> tuple[str, str]:
-    """
-    Parse the INCLUDE/EXCLUDE decision and justification from run_one output.
-
-    Expected embedded format (after the "SECOND TRIAGE:" marker):
-        Include-case: <strongest reason to include, ≤15 words>
-        Exclude-case: <strongest reason to exclude, ≤15 words>
-        Decision: INCLUDE or EXCLUDE
-
-    Blank lines are stripped before parsing (Qwen without thinking sometimes
-    inserts them between lines).
-
-    Returns:
-        ("INCLUDE" | "EXCLUDE", justification)
-        justification = "Include: <include_case> | Exclude: <exclude_case>"
-        Defaults to ("INCLUDE", "parse error — defaulting to INCLUDE") on failure.
-    """
-    cleaned = "\n".join(line for line in reasoning_text.splitlines() if line.strip())
-
-    include_m  = _INCLUDE_CASE_RE.search(cleaned)
-    exclude_m  = _EXCLUDE_CASE_RE.search(cleaned)
-    decision_m = _DECISION_RE.search(cleaned)
-
-    include_str = include_m.group(1).strip() if include_m else ""
-    exclude_str = exclude_m.group(1).strip() if exclude_m else ""
-
-    logger.debug(
-        "[SecondTriage] Include-case: %r | Exclude-case: %r | raw Decision line: %r",
-        include_str, exclude_str,
-        decision_m.group(0) if decision_m else "(not found)",
-    )
-
-    if decision_m:
-        decision = decision_m.group(1).upper()
-        justification = (
-            f"Include: {include_str} | Exclude: {exclude_str}"
-            if (include_str or exclude_str)
-            else decision
-        )
-        return (decision, justification)
-
-    # Fallback: model may have ignored the three-line format; search the tail
-    tail = reasoning_text[-150:]
-    m2 = re.search(r"\b(INCLUDE|EXCLUDE)\b", tail, re.IGNORECASE)
-    if m2:
-        logger.warning(
-            "[SecondTriage] Decision: prefix not found — matched bare word in tail: %r",
-            m2.group(0),
-        )
-        return (m2.group(1).upper(), f"Include: {include_str} | Exclude: {exclude_str}")
-
-    logger.warning(
-        "[SecondTriage] Could not parse INCLUDE/EXCLUDE decision — defaulting to INCLUDE. "
-        "Raw tail: %r",
-        reasoning_text[-200:],
-    )
-    return ("INCLUDE", "parse error — defaulting to INCLUDE")
-
-
 # ── Main entry points ──────────────────────────────────────────────────────────
 
 def run_reasoning(
@@ -448,7 +394,7 @@ def run_second_triage(
     include_single_hit_recessive: bool = True,
     include_compound_het_exception: bool = True,
     include_literature_evidence_quality: bool = True,
-) -> str:
+) -> tuple[str, str, str]:
     """
     Stage 2b — Call 2: structured INCLUDE/EXCLUDE decision with justification.
 
@@ -512,9 +458,10 @@ def run_second_triage(
                                  at. Defaults True.
 
     Returns:
-        Combined text: step-by-step reasoning followed by the inclusion decision
-        on its own line. Compatible with parse_inclusion_decision() and with the
-        REASONING display section in pipeline.py.
+        (combined, decision, justification): combined = the reasoning followed
+        by the Include-case / Exclude-case / Decision lines (REASONING display
+        section in pipeline.py); decision = "INCLUDE" | "EXCLUDE", constrained
+        at decoding time (json_schema) — never parsed from text.
     """
     logger.info("[Reasoning] Call 2/2 — second_triage inclusion decision (INCLUDE/EXCLUDE)...")
     scoring_template   = _load_scoring_prompt()
@@ -534,16 +481,15 @@ def run_second_triage(
         .replace("{xlinked_block}", xlinked_block)
     )
 
-    decision_text = llm.generate(
+    answer = json.loads(llm.generate(
         system="You are an expert clinical geneticist.",
         user=scoring_user,
         max_tokens=MAX_NEW_TOKENS_SCORING,
-    )
+        json_schema=_DECISION_SCHEMA,
+    ))
+    logger.debug("[SecondTriage] Model answer: %s", answer)
 
-    logger.debug("[SecondTriage] Full model output:\n%s", decision_text.strip())
-
-    # parse_inclusion_decision() searches for the Decision: line within the
-    # "SECOND TRIAGE:" block.  The full three-line output is preserved so the
-    # REASONING display section shows Include-case / Exclude-case / Decision.
-    combined = reasoning_text.rstrip() + "\n\nSECOND TRIAGE:\n" + decision_text.strip()
-    return combined
+    include_case, exclude_case = answer["include_case"].strip(), answer["exclude_case"].strip()
+    combined = (reasoning_text.rstrip() + "\n\nSECOND TRIAGE:\n"
+                f"Include-case: {include_case}\nExclude-case: {exclude_case}\nDecision: {answer['decision']}")
+    return combined, answer["decision"], f"Include: {include_case} | Exclude: {exclude_case}"

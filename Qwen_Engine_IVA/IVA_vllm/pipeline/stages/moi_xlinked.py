@@ -12,7 +12,7 @@ code) on top of the Layer 2 base ACMG score — never re-scores base criteria.
 Prompt loaded from prompts/moi_xlinked.txt.
 
 Public API:
-    run_one(variant_context, base_conclusion, xlinked_pattern, llm) -> str
+    run_one(variant_context, base_conclusion, xlinked_pattern, segregation, gene_mode, llm) -> str
 """
 
 from __future__ import annotations
@@ -53,6 +53,7 @@ def run_one(
     base_conclusion: str,
     xlinked_pattern: str,
     segregation: str,
+    gene_mode: str,
     llm: "LLMClient",
 ) -> str:
     """
@@ -64,9 +65,10 @@ def run_one(
         xlinked_pattern:  classify_xlinked_ab() result — "XLR" / "XLD" / "uncertain".
         segregation:      classify_segregation() result ("maternal" / "paternal" /
                            "de_novo" / etc.) — used only to gate the mechanical
-                           BS2 unaffected-carrier check below, XLD only (an
-                           unaffected heterozygous carrier mother is the expected,
-                           uninformative finding for XLR and must not trigger it).
+                           BS2 unaffected-carrier check below.
+        gene_mode:        gene_mode_cache entry for the gene (XLD / XLR /
+                           XLD_XLR / XL / ...). Gates BS2 by the gene's
+                           inheritance, not by the proband's AB pattern.
         llm:               Shared LLMClient instance.
 
     Returns:
@@ -90,13 +92,18 @@ def run_one(
     # Base criteria + Total come from code, never from the model: splice the
     # Stage-4 base block, then (after BS2 below) Total = base + delta.
     result = splice_base_and_total(result, base_conclusion)
-    if xlinked_pattern == "XLD":
-        # Same unaffected-carrier BS2 gap as moi_dominant.py/moi_denovo.py: a
-        # fully-penetrant XLD variant inherited from a mother not stated as
-        # affected is Strong Benign evidence, same DEFAULT-UNAFFECTED POLICY.
-        # XLR is excluded (see run_one's docstring) — a heterozygous unaffected
-        # carrier mother is the expected, uninformative finding there.
-        result = validate_bs2_unaffected_dominant_carrier(result, base_conclusion, segregation)
+    # Unaffected-carrier BS2 (DEFAULT-UNAFFECTED POLICY), gated on the gene's
+    # mode — chrX genes never reach moi_dominant.py, so this is their only
+    # BS2 path. XLD: any carrier parent (het mother, hemizygous father) not
+    # stated as affected. Otherwise (XLR / XLD_XLR / XL): only a parent at
+    # AB ~1.0 (hemizygous father or homozygous mother) — a heterozygous
+    # carrier mother is the expected, uninformative finding for XLR.
+    if gene_mode == "XLD":
+        result = validate_bs2_unaffected_dominant_carrier(
+            result, base_conclusion, segregation, disorder="X-linked dominant")
+    elif segregation == "homozygous_parent":
+        result = validate_bs2_unaffected_dominant_carrier(
+            result, base_conclusion, segregation, disorder="X-linked recessive")
     result = resync_moi_total(result)
     full_context = variant_context + "\n" + base_conclusion
     result = validate_citations(result, full_context)

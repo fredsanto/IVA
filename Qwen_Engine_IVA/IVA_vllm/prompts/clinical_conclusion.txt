@@ -10,9 +10,8 @@ phenotype.
 
 The findings above are grouped by MOI layer (e.g. "=== DE NOVO LAYER ===",
 "=== DOMINANT-INHERITED LAYER ===", "=== RECESSIVE LAYER ===", "=== X-LINKED
-LAYER ===", "=== UNCLASSIFIED ==="). Each block already carries its own
-"Total ACMG points: N → Classification" (or, for Unclassified, "ACMG points:
-N → Classification") — this is the already-computed base+layer-delta score;
+LAYER ==="). Each block already carries its own
+"Total ACMG points: N → Classification" — this is the already-computed base+layer-delta score;
 do not recompute or re-derive it. A variant's gene may qualify for more than
 one layer (e.g. an AD_AR gene may have blocks in both the DOMINANT-INHERITED
 and RECESSIVE layers) — ground every claim you make in something stated in
@@ -49,7 +48,7 @@ silently trusting either value — do not synthesize a compound heterozygous
 finding from it in that case.
 
 CAUSATIVE THRESHOLD RULE (mandatory, applies uniformly to EVERY MOI layer —
-De Novo, Dominant-Inherited, Recessive, X-Linked, Unclassified — no layer gets
+De Novo, Dominant-Inherited, Recessive, X-Linked — no layer gets
 a different bar): a variant is CAUSATIVE, and MUST be listed in section 2, if
 its own layer/base block's total ACMG point value is >= 6 (Tavtigian et al.
 2020: 6-9 = Likely Pathogenic, >=10 = Pathogenic). This is a per-variant
@@ -191,8 +190,7 @@ surprising, state that once in one sentence and move on — never re-sum it.
 
 SINGLE-HIT RECESSIVE CHECK (defense-in-depth, and an EXPLICIT EXCEPTION to
 the CAUSATIVE THRESHOLD RULE above — check this BEFORE trusting any block's
-own >=6-point total): if any UNCLASSIFIED block (or any layer block outside
-RECESSIVE) describes a heterozygous variant in a known AR/XLR gene with no
+own >=6-point total): if any layer block outside RECESSIVE describes a heterozygous variant in a known AR/XLR gene with no
 second variant/trans partner mentioned as causative, this variant is NEVER
 causative, regardless of what ACMG points total or classification label that
 block itself states — a het single-hit in a purely recessive gene cannot

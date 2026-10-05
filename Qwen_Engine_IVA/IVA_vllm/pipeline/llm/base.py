@@ -20,6 +20,7 @@ class LLMClient(ABC):
         temperature: float = 0.0,
         enable_thinking: bool = False,  # always False in this pipeline — enforced at registry level
         repetition_penalty: float = 1.0,
+        json_schema: dict | None = None,
     ) -> str:
         """
         Generate a response for a single system+user turn.
@@ -33,6 +34,8 @@ class LLMClient(ABC):
                              compatibility only.
             repetition_penalty: >1.0 penalises repeated tokens (1.0 = off); used to
                              retry a response that degenerated into a repetition loop.
+            json_schema:     JSON schema the response must follow, enforced at decoding
+                             time (constrained decoding); the response is then that JSON.
 
         Returns:
             The model's response as a plain string.
