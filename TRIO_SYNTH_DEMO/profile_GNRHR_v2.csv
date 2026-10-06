@@ -1,0 +1,8 @@
+Variant,Chromosome,Position,RS_ID,Ref_seq,Var_seq,Type,HGVS,Zygosity,Gene,Allelic_balance_proband,Allelic_balance_1,Allelic_balance_2
+chr4:68606400 C>T,chr4,68606400,NA,C,T,SNV,NM_000406.3:c.785G>A p.(Arg262Gln),Heterozygous,GNRHR,0.5,0,0.5
+chrX:154359017 C>T,chrX,154359017,rs782170730,C,T,SNV,NM_001110556.2:c.4441G>A p.Ala1481Thr,Heterozygous,FLNA,0.5,0.5,0
+chr3:129528953 T>C,chr3,129528953,rs758491851,T,C,SNV,NM_000539.3:c.220T>C p.Tyr74His,Heterozygous,RHO,0.5,0,0.5
+chr17:43092350 T>G,chr17,43092350,rs876658975,T,G,SNV,NM_007294.4:c.3181A>C p.Ile1061Leu,Heterozygous,BRCA1,0.5,0,0.5
+chr4:68619788 A>T,chr4,68619788,NA,A,T,nonsense,NM_000406.3:c.266T>A p.(Leu89Ter),Heterozygous,GNRHR,0.5,0.5,0
+chr12:6057048 G>T,chr12,6057048,rs758074950,G,T,SNV,NM_000552.5:c.1754C>A p.Ala585Glu,Heterozygous,VWF,0.5,0.5,0
+chr11:47341183 G>T,chr11,47341183,NA,G,T,SNV,NM_000256.3:c.1852C>A p.Pro618Thr,Heterozygous,MYBPC3,0.5,0,0.5

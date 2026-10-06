@@ -1,0 +1,7 @@
+Variant,Chromosome,Position,RS_ID,Ref_seq,Var_seq,Type,HGVS,Zygosity,Gene,Allelic_balance_proband,Allelic_balance_1,Allelic_balance_2
+chr17:80110748 T>G,chr17,80110748,NA,T,G,SNV,NM_000152.5:c.1459T>G p.Phe487Val,Heterozygous,GAA,0.5,0,0.5
+chr15:93004656 C>T,chr15,93004656,rs2505607968,C,T,nonsense,NM_001271.4:c.4318C>T p.(Arg1440Ter),Heterozygous,CHD2,0.5,0,0
+chr22:29639142 C>T,chr22,29639142,rs1060503668,C,T,SNV,NM_000268.4:c.293C>T p.Ala98Val,Heterozygous,NF2,0.5,0,0.5
+chr3:30671781 A>G,chr3,30671781,NA,A,G,SNV,NM_003242.6:c.598A>G p.Thr200Ala,Heterozygous,TGFBR2,0.5,0.5,0
+chr17:7670673 C>T,chr17,7670673,rs1567542019,C,T,SNV,NM_000546.6:c.1036G>A p.Glu346Lys,Heterozygous,TP53,0.5,0,0.5
+chr11:2776997 C>A,chr11,2776997,rs199472804,C,A,SNV,NM_000218.3:c.1697C>A p.Ser566Tyr,Heterozygous,KCNQ1,0.5,0.5,0
