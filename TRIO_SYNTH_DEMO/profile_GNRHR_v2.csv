@@ -1,4 +1,4 @@
-Variant,Chromosome,Position,RS_ID,Ref_seq,Var_seq,Type,HGVS,Zygosity,Gene,Allelic_balance_proband,Allelic_balance_1,Allelic_balance_2
+Variant,Chromosome,Position,RS_ID,Ref_seq,Var_seq,Type,HGVS,Zygosity,Gene,Allelic_Balance_proband,Allelic_Balance_mother,Allelic_Balance_father
 chr4:68606400 C>T,chr4,68606400,NA,C,T,SNV,NM_000406.3:c.785G>A p.(Arg262Gln),Heterozygous,GNRHR,0.5,0,0.5
 chrX:154359017 C>T,chrX,154359017,rs782170730,C,T,SNV,NM_001110556.2:c.4441G>A p.Ala1481Thr,Heterozygous,FLNA,0.5,0.5,0
 chr3:129528953 T>C,chr3,129528953,rs758491851,T,C,SNV,NM_000539.3:c.220T>C p.Tyr74His,Heterozygous,RHO,0.5,0,0.5

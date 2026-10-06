@@ -1,4 +1,4 @@
-Variant,Chromosome,Position,RS_ID,Ref_seq,Var_seq,Type,HGVS,Zygosity,Gene,Allelic_balance_proband,Allelic_balance_1,Allelic_balance_2
+Variant,Chromosome,Position,RS_ID,Ref_seq,Var_seq,Type,HGVS,Zygosity,Gene,Allelic_Balance_proband,Allelic_Balance_mother,Allelic_Balance_father
 chr17:80110748 T>G,chr17,80110748,NA,T,G,SNV,NM_000152.5:c.1459T>G p.Phe487Val,Heterozygous,GAA,0.5,0,0.5
 chr15:93004656 C>T,chr15,93004656,rs2505607968,C,T,nonsense,NM_001271.4:c.4318C>T p.(Arg1440Ter),Heterozygous,CHD2,0.5,0,0
 chr22:29639142 C>T,chr22,29639142,rs1060503668,C,T,SNV,NM_000268.4:c.293C>T p.Ala98Val,Heterozygous,NF2,0.5,0,0.5

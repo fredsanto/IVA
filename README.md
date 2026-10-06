@@ -263,7 +263,7 @@ Before normalization, the CSV header row (+ one sample data row) is inspected by
 
 The SLM is asked for JSON keyed by the fixed canonical field names (not by the original column names) — column-name values are matched back with a whitespace/case-normalized fallback — because requiring the model to echo column names byte-exact as JSON *keys* proved fragile on real-world headers (BOM/whitespace artifacts silently broke exact-match lookups).
 
-Sample-specific allelic-balance columns (`Allelic balance - <sample_id>`, proband/mother/father trio) are detected structurally by regex beforehand, not sent to the SLM — that pattern is unambiguous and mechanical.
+Trio allelic-balance columns named `Allelic_Balance_<proband/mother/father>` (any case) are detected structurally by regex beforehand, not sent to the SLM — that pattern is unambiguous and mechanical. Any other allelic-balance naming is classified by the SLM like the rest of the header.
 
 What the SLM understood is surfaced twice:
 - Live, via an SSE `status` event right after normalization (`"Column header interpretation (SLM-driven): ..."`)

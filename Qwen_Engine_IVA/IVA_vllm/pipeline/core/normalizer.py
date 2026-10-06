@@ -531,6 +531,14 @@ _HEADER_INTERPRETATION_SYSTEM = (
 )
 
 
+_TRIO_AB_COL_RE = re.compile(r"^allelic_balance_(proband|mother|father)$", re.IGNORECASE)
+_TRIO_AB_FIELD = {
+    "proband": "Allelic_balance",
+    "mother":  "Allelic_balance_mother",
+    "father":  "Allelic_balance_father",
+}
+
+
 def _map_columns_llm(df: pd.DataFrame, llm) -> tuple[pd.DataFrame, str]:
     """
     SLM-driven replacement for _map_columns_old(): asks the model to classify
@@ -541,8 +549,10 @@ def _map_columns_llm(df: pd.DataFrame, llm) -> tuple[pd.DataFrame, str]:
     space-strict, silently failed on any other naming convention (verified:
     a real upload used "Allelic_balance_1"/"Allelic_balance_2" and every one
     of those columns came back "(unmapped)", silently discarding trio
-    parental data for every variant in that file). The model now classifies
-    ALL header columns itself, including these — see the
+    parental data for every variant in that file). Columns named exactly
+    Allelic_Balance_<proband|mother|father> (any case) are claimed
+    structurally before the SLM call (_TRIO_AB_COL_RE). Any other
+    allelic-balance naming is classified by the model — see the
     Allelic_balance/Allelic_balance_mother/Allelic_balance_father entries in
     _FIELD_DESCRIPTIONS for the matching rules (explicit naming, sample-ID
     suffix, or positional fallback when naming gives no parent identity).
@@ -585,6 +595,17 @@ def _map_columns_llm(df: pd.DataFrame, llm) -> tuple[pd.DataFrame, str]:
     llm_cols: list[str] = []
     exact_matches: list[tuple[str, str]] = []
     for col in df.columns:
+        # Trio allelic-balance columns named Allelic_Balance_<proband|mother|father>
+        # are unambiguous: claimed structurally here, never sent to the SLM.
+        ab_match = _TRIO_AB_COL_RE.match(col.strip())
+        if ab_match:
+            ab_field = _TRIO_AB_FIELD[ab_match.group(1).lower()]
+            if ab_field not in claimed:
+                if col != ab_field:
+                    mapping[col] = ab_field
+                claimed.add(ab_field)
+                exact_matches.append((col, ab_field))
+                continue
         exact_field = _target_by_lower.get(col.strip().lower())
         if exact_field and exact_field not in claimed:
             if col != exact_field:
