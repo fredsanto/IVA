@@ -145,15 +145,15 @@ Git username: `fredsanto`
 | `profile_WWOX_v2.csv` | WWOX | homozygous, both parents carriers |
 | `profile_RS1_v2.csv` | RS1 | hemizygous, X-linked, maternal carrier |
 
-Upload one file in the browser together with a phenotype description, or use the API:
+Each table has a matching phenotype description (`<profile>.phen.txt`, e.g. `profile_MECP2_v2.phen.txt`). Upload the table in the browser and paste its phenotype, or use the API:
 
 ```bash
 curl -F csv_file=@TRIO_SYNTH_DEMO/profile_MECP2_v2.csv \
-     -F patient_report="Developmental regression after normal early development, loss of purposeful hand use with stereotypic hand-wringing, acquired microcephaly, seizures." \
+     -F patient_report="$(cat TRIO_SYNTH_DEMO/profile_MECP2_v2.phen.txt)" \
      http://localhost:8002/analyze
 ```
 
-The expected gene should appear among the causative findings of the report. The phenotype text is free; describe the clinical picture the causative gene is known for.
+The expected gene should appear among the causative findings of the report.
 
 ---
 
