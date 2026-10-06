@@ -127,6 +127,36 @@ Git username: `fredsanto`
 
 ---
 
+## Demo — synthetic trios
+
+[`TRIO_SYNTH_DEMO/`](TRIO_SYNTH_DEMO/) holds eleven small synthetic trio variant tables for trying the server end to end without patient data. Each file has one causative gene plus noise variants in unrelated genes, with proband and parental allelic balance in the `Allelic_Balance_proband` / `Allelic_Balance_mother` / `Allelic_Balance_father` columns (0 = absent, 0.5 = heterozygous, 1 = homozygous/hemizygous).
+
+| File | Causative gene | Inheritance in the trio |
+|------|----------------|-------------------------|
+| `profile_CHD2_v2.csv` | CHD2 | de novo heterozygous |
+| `profile_EBF3_v2.csv` | EBF3 | de novo heterozygous |
+| `profile_KDM2A_v2.csv` | KDM2A | de novo heterozygous |
+| `profile_MECP2_v2.csv` | MECP2 | de novo, X-linked |
+| `profile_TET3_v2.csv` | TET3 | heterozygous, inherited from the father |
+| `profile_GNRHR_v2.csv` | GNRHR | compound heterozygous (one variant per parent) |
+| `profile_PMM2_v2.csv` | PMM2 | compound heterozygous (one variant per parent) |
+| `profile_PMM2_denovo_comphet.csv` | PMM2 | compound heterozygous (maternal + de novo) |
+| `profile_GPR179_v2.csv` | GPR179 | homozygous, both parents carriers |
+| `profile_WWOX_v2.csv` | WWOX | homozygous, both parents carriers |
+| `profile_RS1_v2.csv` | RS1 | hemizygous, X-linked, maternal carrier |
+
+Upload one file in the browser together with a phenotype description, or use the API:
+
+```bash
+curl -F csv_file=@TRIO_SYNTH_DEMO/profile_MECP2_v2.csv \
+     -F patient_report="Developmental regression after normal early development, loss of purposeful hand use with stereotypic hand-wringing, acquired microcephaly, seizures." \
+     http://localhost:8002/analyze
+```
+
+The expected gene should appear among the causative findings of the report. The phenotype text is free; describe the clinical picture the causative gene is known for.
+
+---
+
 ## Architecture
 
 ```
