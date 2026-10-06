@@ -75,7 +75,10 @@ fuser -k "${PIPELINE_PORT}/tcp" 2>/dev/null || true
 sleep 2
 
 # ── Start vLLM ────────────────────────────────────────────────────────────────
-vllm serve Qwen/Qwen3.5-9B \
+# Run vLLM through the env's own interpreter: the `vllm` console script's
+# shebang is the absolute python path from when the env was created, which
+# breaks (or silently points elsewhere) once the env is copied or moved.
+"$CONDA_ENV/bin/python" -m vllm.entrypoints.cli.main serve Qwen/Qwen3.5-9B \
     --dtype bfloat16 \
     --max-model-len 32768 \
     --gpu-memory-utilization 0.90 \
