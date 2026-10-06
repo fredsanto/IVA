@@ -219,7 +219,8 @@ def run(
         facts.append(f"SF V{a['index'] + 1}: {gene} {a['hgvs']}; condition: {a['condition']}; "
                      f"inheritance: {acmg_sf.ACMG_SF_INHERITANCE.get(gene, 'NA')} "
                      f"[{acmg_sf.ACMG_SF_REFERENCE}]; classification: {a['classification']}; "
-                     f"zygosity: {a['zygosity']}")
+                     f"zygosity: {a['zygosity']}; segregation: "
+                     f"{_SEGREGATION_TEXT.get(segregation.get(a['index'], ''), 'not assessed')}")
         fields[f"sf_V{a['index'] + 1}"] = _allow([acmg_sf.ACMG_SF_REFERENCE])
         field_gene[f"sf_V{a['index'] + 1}"] = gene
 
@@ -281,7 +282,8 @@ def run(
         gene, key = a["gene"], f"sf_V{a['index'] + 1}"
         out += [f"### {gene} {a['hgvs']}",
                 f"Condition: {a['condition']} | Inheritance: {acmg_sf.ACMG_SF_INHERITANCE.get(gene, 'NA')} | "
-                f"Classification: {a['classification']} | Zygosity: {a['zygosity']}",
+                f"Classification: {a['classification']} | Zygosity: {a['zygosity']} | Segregation: "
+                f"{_SEGREGATION_TEXT.get(segregation.get(a['index'], ''), 'not assessed')}",
                 texts[key], ""]
     return "\n".join(line for line in out if line is not None).rstrip() + "\n"
 
