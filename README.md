@@ -417,6 +417,39 @@ The full pipeline (direct mode) uses the conda env at `Qwen_Engine_IVA/env_vllm_
 
 ## Web UI
 
+![IVA web app showing a completed trio analysis](webapp-screenshot.png)
+
+*The web app after a finished run on the synthetic trio
+`TRIO_SYNTH_DEMO/profile_TET3_v2.csv`.*
+
+### Using the web app
+
+1. Start the server (`start_iva.sh`, Docker, or `launch_qwen.sh` on SLURM) and
+   open `http://localhost:8002`. On a cluster, open the SSH tunnel first.
+2. **Variants file:** drop a CSV or Excel file on the upload box, or click it to
+   browse. Column names do not have to match exactly; the server maps headers
+   to its internal fields. For a trio, add `Allelic_Balance_proband`,
+   `Allelic_Balance_mother` and `Allelic_Balance_father` columns so
+   segregation is used.
+3. **Patient phenotype:** describe the proband's clinical features in free
+   text, plus family history (affected or unaffected parents) if known.
+4. Click **Submit Analysis**. The variant table fills in as soon as the file is
+   parsed, and each row is ticked as it passes retrieval, triage, reasoning
+   and conclusion. The live activity panel streams the server log. A 6-variant
+   trio took about 4 minutes on one GPU once vLLM was loaded.
+5. When the run ends, **Live Report** shows the clinical conclusion: phenotype
+   summary, causative gene(s) with ACMG criteria and points, VUS, and ACMG
+   secondary findings. **Download full report (.txt)** saves the complete
+   report, including per-variant evidence and excluded variants.
+6. Use **Ask a follow-up question** to ask about the finished report, for
+   example why a criterion was applied.
+7. **Clear & New Analysis** resets the page for the next case.
+
+You can close or reload the tab during a run. The job keeps running on the
+server and the page reconnects to it (see [Job persistence](#job-persistence)).
+
+### Panels
+
 Single-page dark-theme interface:
 
 - **Input panel** — upload variants CSV, enter patient phenotype, submit / cancel
