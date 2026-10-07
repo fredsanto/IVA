@@ -1,4 +1,4 @@
-# ServerQwen — Qwen Variant Analysis Server
+# IVA — Intelligent Variant Analysiser
 
 ## Installation
 
