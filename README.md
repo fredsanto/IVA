@@ -523,3 +523,7 @@ this license does not cover. Notably, SpliceAI scores are free for academic and
 not-for-profit use only (other use requires a license from Illumina), and the
 SpliceAI-lookup (Broad Institute) and AutoPVS1 (BGI) web services have their own
 terms of use. The language model (Qwen3.5-9B) and vLLM are Apache-2.0.
+
+## Note
+
+IVA was built upon a first prototype by Eric Ducret, [Genova](https://github.com/eric-ducret/genova-pipeline).
