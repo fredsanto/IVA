@@ -1,0 +1,23 @@
+GENE: {gene}
+
+EVIDENCE:
+{evidence_text}
+
+QUOTE (given by a reader as the evidence statement that this gene's condition
+is inherited as {mode_label}):
+"{quote}"
+
+TASK — IS THE QUOTE IN THE EVIDENCE?
+
+Answer YES when the EVIDENCE above contains this statement: the same sentence
+or clause, even if the quote spells out an abbreviation the evidence uses,
+fixes a typo or spacing, or drops words without changing the meaning.
+
+Answer NO when the statement is not in the evidence: the quote says something
+the evidence does not say, attributes it to a different gene or condition, or
+changes the inheritance the evidence states.
+
+Answer as a JSON object:
+- "reasoning": one sentence naming where in the evidence the statement is, or
+  why it is not there.
+- "in_evidence": exactly "YES" or exactly "NO".

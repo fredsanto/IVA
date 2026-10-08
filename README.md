@@ -195,11 +195,12 @@ The server **cannot be accessed directly from outside the cluster**. All browser
 
 ## Pipeline Location
 
-The pipeline package and its conda env live **inside ServerQwen**, at `Qwen_Engine_IVA/IVA_vllm` and `Qwen_Engine_IVA/env_vllm_0606` — a self-contained copy, not a reference to the first version `eric_folder/genova_vllm_556_0610` (which is a separate, independently-tracked repo). ServerQwen only ever reads/edits its own copy under `Qwen_Engine_IVA/` — the two are not kept in sync automatically; a change made in one does not appear in the other unless copied over manually.
+The pipeline package and its conda env live **inside ServerQwen**, at `Qwen_Engine_IVA/IVA_vllm` and `Qwen_Engine_IVA/env_vllm_0606`.
 
 All paths are self-resolving, not hardcoded to a specific user/checkout location:
 - `launch_qwen.sh` derives its own directory from `$SLURM_SUBMIT_DIR` (falls back to `$(pwd)`)
-- `server_qwen.py` derives `_ERC_FOLDER` from its own file location (`Path(__file__).parent`)
+- `launch_qwen.sh` starts vLLM with the env's own interpreter (`$CONDA_ENV/bin/python -m vllm.entrypoints.cli.main`), not the `vllm` console script, whose shebang is an absolute path fixed when the env was created
+- `server_qwen.py` derives `_PIPELINE_DIR` from its own file location (`Path(__file__).parent`)
 
 So the whole `ServerQwen/` folder can be relocated or checked out anywhere without editing any script.
 
@@ -552,3 +553,7 @@ this license does not cover. Notably, SpliceAI scores are free for academic and
 not-for-profit use only (other use requires a license from Illumina), and the
 SpliceAI-lookup (Broad Institute) and AutoPVS1 (BGI) web services have their own
 terms of use. The language model (Qwen3.5-9B) and vLLM are Apache-2.0.
+
+## Note
+
+IVA was built upon a first prototype by Eric Ducret, [Genova](https://github.com/eric-ducret/genova-pipeline).

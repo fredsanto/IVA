@@ -21,26 +21,19 @@ Weight the retrieved evidence as follows:
 - Mechanistic, pathway, or functional relevance (no gene–disease link) → weak reason to keep.
 
 A real patient's phenotype often lists findings from more than one distinct
-cluster (e.g. a neurodevelopmental cluster — epilepsy, intellectual disability,
-autism — AND a separate cluster — an organ malformation, a cancer, a skeletal
-finding). "NO DISEASE LINK" / "gene unrelated to phenotype" only applies when the
+cluster (cluster A and an unrelated cluster B). "NO DISEASE LINK" / "gene unrelated to phenotype" only applies when the
 evidence affirmatively links this gene to NONE of the patient's clusters. If the
 evidence links the gene to AT LEAST ONE distinct cluster, that is a reason to KEEP
 — even if the evidence is silent on the patient's other cluster(s). Being silent
 on a different cluster is not the same as ruling the gene out; only discard on
 phenotype grounds when the mismatch is across every cluster, not just one.
 
-Output exactly three lines and nothing else:
-Keep-case: <strongest reason to KEEP — must be a positive or uncertain argument, ≤15 words>
-Discard-case: <strongest reason to DISCARD — must be a contrary or disqualifying argument, ≤15 words>
-Decision: KEEP or DISCARD
+Answer as a JSON object:
+- "keep_case": the strongest reason to KEEP — a positive or uncertain argument, 15 words or fewer.
+- "discard_case": the strongest reason to DISCARD — a contrary or disqualifying argument, 15 words or fewer.
+- "decision": exactly "KEEP" or exactly "DISCARD".
 
-Keep-case and Discard-case must be opposing perspectives. Keep-case is the best argument
+keep_case and discard_case must be opposing perspectives. keep_case is the best argument
 FOR keeping the variant (e.g. gene relevant, variant rare, mechanism plausible, uncertain).
-Discard-case is the best argument AGAINST it (e.g. benign, common, unrelated gene).
+discard_case is the best argument AGAINST it (e.g. benign, common, unrelated gene).
 If there is truly no argument for one side, write "no argument".
-
-Output form:
-Keep-case: <strongest reason to KEEP>
-Discard-case: <strongest reason to DISCARD>
-Decision: <KEEP or DISCARD>

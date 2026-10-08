@@ -42,6 +42,8 @@ _NON_CONDITION_FRAGMENTS = {
 
 _FEATURE_RE = re.compile(r"<ClinicalFeature[^>]*>\s*<Name>([^<]+)</Name>")
 _INHERITANCE_RE = re.compile(r"<ModeOfInheritance[^>]*>.*?<Name>([^<]+)</Name>", re.S)
+_OMIM_MIM_RE = re.compile(r"<OMIM>(.*?)</OMIM>", re.S)
+_MIM_RE = re.compile(r"<MIM>(\d+)</MIM>")
 
 _cache: dict[str, tuple[str, list[str]] | None] = {}
 _lock = threading.Lock()
@@ -70,9 +72,15 @@ def split_condition_list(phenotype_list: str) -> list[str]:
     return names
 
 
-def _fetch(name: str) -> tuple[str, list[str]] | None:
+def _fetch(name: str, gene: str) -> tuple[str, list[str]] | None:
+    # Always restricted to MedGen concepts linked to the gene: a name-only search
+    # returned other genes' diseases (observed: "Rett syndrome" -> FOXG1 disorder,
+    # a generic DEE name -> a DEE subtype of another gene), so the patient was
+    # compared against the wrong disease's features.
+    if not gene:
+        return None
     ids: list[str] = []
-    for term in (f'"{name}"[title]', name):
+    for term in (f'"{name}"[title] AND {gene}[gene]', f'({name}) AND {gene}[gene]'):
         ids = _ncbi_get(
             "esearch.fcgi",
             {"db": "medgen", "term": term, "retmode": "json", "retmax": _MAX_HITS},
@@ -91,26 +99,27 @@ def _fetch(name: str) -> tuple[str, list[str]] | None:
         rec = result.get(uid, {})
         feats = _FEATURE_RE.findall(html.unescape(rec.get("conceptmeta", "")))
         hits.append((rec.get("title", ""), list(dict.fromkeys(feats))[:_MAX_FEATURES]))
-    # Prefer an exact-title hit with features, then any hit with features.
+    # Exact-title hit with features, else the only hit (if it has features);
+    # several non-exact hits are ambiguous -> None (judged by name only).
     for title, feats in hits:
         if feats and title.strip().lower() == name.lower():
             return title, feats
-    for title, feats in hits:
-        if feats:
-            return title, feats
+    if len(hits) == 1 and hits[0][1]:
+        return hits[0]
     return None
 
 
-def condition_features(name: str) -> tuple[str, list[str]] | None:
-    """(MedGen title, clinical feature names) for a condition name, or None."""
-    key = name.strip().lower()
+def condition_features(name: str, gene: str) -> tuple[str, list[str]] | None:
+    """(MedGen title, clinical feature names) for a condition name among the
+    MedGen concepts linked to the gene, or None."""
+    key = f"{gene.strip().upper()}|{name.strip().lower()}"
     with _lock:
         if key in _cache:
             return _cache[key]
     try:
-        value = _fetch(name)
+        value = _fetch(name, gene)
     except Exception as e:
-        logger.warning("[MedGen] feature lookup failed for %r: %s", name, e)
+        logger.warning("[MedGen] feature lookup failed for %r (%s): %s", name, gene, e)
         return None  # not cached: a transient failure may succeed next time
     with _lock:
         _cache[key] = value
@@ -118,6 +127,9 @@ def condition_features(name: str) -> tuple[str, list[str]] | None:
 
 
 _gene_cache: dict[str, list[tuple[str, list[str]]]] = {}
+# {GENE: {MedGen title: {"cui": concept ID, "omim": [MIM numbers]}}}, filled by
+# the same gene lookup as _gene_cache.
+_gene_ids_cache: dict[str, dict[str, dict]] = {}
 
 
 def _fetch_gene_diseases(gene: str) -> list[tuple[str, list[str]]]:
@@ -141,11 +153,30 @@ def _fetch_gene_diseases(gene: str) -> list[tuple[str, list[str]]]:
         "esummary.fcgi", {"db": "medgen", "id": ",".join(uids), "retmode": "json"},
         DEFAULT_TIMEOUT,
     ).json().get("result", {})
+    ids = {}
+    for u in result.get("uids", []):
+        meta = html.unescape(result[u].get("conceptmeta", ""))
+        omim = _OMIM_MIM_RE.search(meta)
+        ids[result[u].get("title", "")] = {
+            "cui": result[u].get("conceptid", ""),
+            "omim": _MIM_RE.findall(omim.group(1)) if omim else [],
+        }
+    with _lock:
+        _gene_ids_cache[gene.strip().upper()] = ids
     return [
         (result[u].get("title", ""),
          list(dict.fromkeys(_INHERITANCE_RE.findall(html.unescape(result[u].get("conceptmeta", ""))))))
         for u in result.get("uids", [])
     ]
+
+
+def gene_disease_ids(gene: str) -> dict[str, dict]:
+    """{MedGen title: {"cui", "omim"}} for the gene's MedGen disease concepts
+    (fetched with gene_disease_inheritance); {} when not looked up or none."""
+    if gene_disease_inheritance(gene) is None:
+        return {}
+    with _lock:
+        return dict(_gene_ids_cache.get(gene.strip().upper(), {}))
 
 
 def gene_disease_inheritance(gene: str) -> list[tuple[str, list[str]]] | None:

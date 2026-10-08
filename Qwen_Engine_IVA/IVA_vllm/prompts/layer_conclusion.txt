@@ -13,8 +13,7 @@ only job is to extract, from THIS layer's blocks, which variants are
 CAUSATIVE and which are Notable VUS, and write them up completely enough
 that the downstream step never needs to re-read the raw blocks below.
 
-Each block already carries its own "Total ACMG points: N → Classification"
-(or, for Unclassified, "ACMG points: N → Classification") — this is an
+Each block already carries its own "Total ACMG points: N → Classification" — this is an
 already-computed, already-corrected score; do not recompute or re-derive it.
 
 CAUSATIVE THRESHOLD RULE (mandatory): a variant is CAUSATIVE if its own

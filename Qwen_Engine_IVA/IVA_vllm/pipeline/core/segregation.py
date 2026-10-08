@@ -20,7 +20,7 @@ Public API:
     classify_ab_ratio(value) -> "het" | "hom" | "absent" | "uncertain"
     mosaicism_note(ab_entry) -> str  (caveat suffix, or "")
     classify_segregation(proband_ab, mother_ab, father_ab) -> str
-    classify_phase(segregation_a, segregation_b) -> "cis" | "trans" | "unknown"
+    classify_phase(segregation_a, segregation_b) -> "cis" | "trans" | "denovo" | "unknown"
     classify_xlinked_ab(proband_ab, mother_ab) -> "XLR" | "XLD" | "uncertain"
 """
 
@@ -206,10 +206,15 @@ def classify_phase(segregation_a: str, segregation_b: str) -> str:
     Only "maternal"/"paternal" segregation results carry a determinable
     parent-of-origin — same parent for both variants -> "cis" (a hard block on
     treating the pair as compound heterozygous); different parents -> "trans".
-    Any other combination (de_novo, both_carriers, homozygous_parent,
-    uncertain, insufficient_data on either side) yields "unknown" — phase
-    cannot be determined, callers should treat this as "may proceed with
-    caveat", not as an automatic pass or fail."""
+    Either variant de novo -> "denovo": parental testing cannot phase a de
+    novo allele, so compound heterozygosity is assumed (treated as trans)
+    and the report must say phase has to be checked.
+    Any other combination (both_carriers, homozygous_parent, uncertain,
+    insufficient_data on either side) yields "unknown" — phase cannot be
+    determined, callers should treat this as "may proceed with caveat", not
+    as an automatic pass or fail."""
+    if "de_novo" in (segregation_a, segregation_b):
+        return "denovo"
     origin_map = {"maternal": "mother", "paternal": "father"}
     origin_a = origin_map.get(segregation_a)
     origin_b = origin_map.get(segregation_b)

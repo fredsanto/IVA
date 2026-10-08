@@ -30,7 +30,7 @@ _BASE_CRITERIA_BLOCK_RE = re.compile(r"(\*\*Base ACMG criteria\b[^\n]*\*\*\n(?:-
 
 
 def validate_bs2_unaffected_dominant_carrier(
-    result: str, base_conclusion: str, segregation: str
+    result: str, base_conclusion: str, segregation: str, disorder: str = "dominant"
 ) -> str:
     """
     Appends a BS2 [Strong, -4] bullet to this layer's own reproduced
@@ -40,7 +40,8 @@ def validate_bs2_unaffected_dominant_carrier(
     Total point lines automatically — when ALL of:
 
       (1) segregation is "maternal" or "paternal" (genuinely inherited from
-          one identified parent, backend-determined, not de novo);
+          one identified parent, backend-determined, not de novo), or
+          "homozygous_parent" (a parent carries two copies of the variant);
       (2) BS2 is not already present in the base conclusion (upstream
           already handled it, whatever it decided — never double-apply);
       (3) this layer's own result did NOT apply PP1 (no cosegregation
@@ -49,11 +50,14 @@ def validate_bs2_unaffected_dominant_carrier(
           default. A confirmed-affected transmitting parent (PP1 applied)
           is not a clean unaffected-carrier case and BS2 does not apply.
 
+    `disorder` names the inheritance in the BS2 text ("dominant", or
+    "X-linked dominant" / "X-linked recessive" from moi_xlinked.py).
+
     No-op (returns `result` unchanged) if any condition fails, or if the
     expected "Base ACMG criteria" block isn't found in the expected format
     (leave untouched rather than guess where to insert).
     """
-    if segregation not in ("maternal", "paternal"):
+    if segregation not in ("maternal", "paternal", "homozygous_parent"):
         return result
     if _BS2_ALREADY_PRESENT_RE.search(base_conclusion):
         return result
@@ -64,13 +68,17 @@ def validate_bs2_unaffected_dominant_carrier(
     if not m:
         return result
 
-    parent_label = "mother" if segregation == "maternal" else "father"
+    if segregation == "homozygous_parent":
+        carrier = ("a parent homozygous (or, for a chrX father, hemizygous) for the variant, clinically unaffected"
+                   if disorder.startswith("X-linked") else
+                   "a parent homozygous for the variant, clinically unaffected")
+    else:
+        carrier = f"the {'mother' if segregation == 'maternal' else 'father'}, a clinically unaffected transmitting parent"
     bs2_line = (
-        f"- BS2 [Strong, -4]: Observed in the {parent_label}, a clinically "
-        "unaffected transmitting parent (no family-history evidence "
+        f"- BS2 [Strong, -4]: Observed in {carrier} (no family-history evidence "
         "supports this parent being affected — DEFAULT-UNAFFECTED POLICY "
-        "applies), at a genotype expected to cause a fully penetrant "
-        "dominant disorder if this variant were truly pathogenic.\n"
+        f"applies), at a genotype expected to cause a fully penetrant "
+        f"{disorder} disorder if this variant were truly pathogenic.\n"
     )
     insertion_point = m.end()
     return result[:insertion_point] + bs2_line + result[insertion_point:]

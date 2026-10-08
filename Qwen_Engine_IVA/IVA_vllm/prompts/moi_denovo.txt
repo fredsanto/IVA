@@ -40,10 +40,11 @@ TASK:
    "uncertain" — SEGREGATION already resolved that question deterministically.
 
 2. If PARENTAL DATA STATUS is "partial (one parent only)": de novo status
-   cannot be confirmed with a trio. If the available parent's data supports
-   the variant being absent in that parent (consistent with, but not proof
-   of, de novo), apply PM6 [Moderate, +2] — assumed de novo, without
-   confirmation of paternity/maternity or complete parental testing.
+   CANNOT be assessed. Both PS2 and PM6 require BOTH parents tested; a
+   variant absent in the one tested parent may still be inherited from the
+   untested parent. Do not apply PS2 or PM6. State explicitly that the
+   variant is not inherited from the tested parent and that its de novo
+   status is unknown.
 
 3. If PARENTAL DATA STATUS is "none": de novo status CANNOT be assessed at
    all. Do not apply PS2 or PM6. State this explicitly — this variant is

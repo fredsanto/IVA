@@ -590,6 +590,9 @@ def _criteria_section(base_conclusion: str) -> tuple[str, bool]:
     return base_conclusion[start:end], has_heading
 
 
+_MOI_ONLY_CODES = frozenset({"PS2", "PM6", "PP1"})
+
+
 def extract_base_acmg(base_conclusion: str) -> tuple[str, float] | None:
     """
     Pulls the applied ACMG criteria out of a variant's own Stage-4
@@ -643,7 +646,16 @@ def extract_base_acmg(base_conclusion: str) -> tuple[str, float] | None:
 
     bullets = []
     kept: dict[str, float] = {}
+    dropped = 0.0
     for n, c in enumerate(found):
+        # PS2/PM6 (de novo) and PP1 (cosegregation) belong to the MOI layers,
+        # which add them as their own delta. conclusion.txt bans them in the
+        # base, but the SLM still writes them; kept here they were summed
+        # twice (base + layer delta, e.g. CHD2 trio 16 → 20 pts).
+        if c.code in _MOI_ONLY_CODES:
+            logger.warning("acmg_points.extract_base_acmg: dropped MOI-only %s from base criteria", c.code)
+            dropped += c.points
+            continue
         if c.code in kept:
             if kept[c.code] != c.points:
                 logger.warning(
@@ -663,7 +675,7 @@ def extract_base_acmg(base_conclusion: str) -> tuple[str, float] | None:
     points = sum(kept.values())
     if not has_heading:
         logger.warning("acmg_points.extract_base_acmg: no 'ACMG criteria' heading — read criteria with point tags from the whole conclusion.")
-    if stated is not None and stated != points:
+    if stated is not None and stated - dropped != points:
         logger.warning(
             "acmg_points.extract_base_acmg: conclusion states %s pts, its criteria sum to %s — using %s. Raw conclusion:\n%s",
             _sum_str(stated), _sum_str(points), _sum_str(points), base_conclusion[:4000],
@@ -700,6 +712,33 @@ _MODEL_BASE_BLOCK_RE = re.compile(
 _PVS1_NOTE_RE = re.compile(r"(?m)^\*\*(?:PVS1 mechanism note|Gene mechanism):\*\*[^\n]*")
 _MODEL_BASE_POINTS_RE = re.compile(r"(?m)^\*\*Base ACMG points:\*\*[^\n]*\n?")
 _MODEL_TOTAL_RE = re.compile(r"(?m)^\*\*Total ACMG points:\*\*[^\n]*\n?")
+
+
+def cap_layer_pp1(section: str) -> str:
+    """
+    For ONE variant's dominant-inherited or X-linked layer section, before
+    splice_base_and_total: PP1 there rests on a single transmitting parent
+    (one informative meiosis), so it is Supporting at most. Rewrites any
+    stronger PP1 bullet to [Supporting, +1] and caps the layer's delta line
+    at +1 (PP1 is the only criterion these layers apply). Real observed
+    failure: PP1 [Strong, +4] from an affected father lifted a VUS-level
+    missense to Likely Pathogenic.
+    """
+    capped = False
+    for c in reversed(find_criteria(section, in_list=True)):
+        line_start = section.rfind("\n", 0, c.start) + 1
+        if c.code != "PP1" or c.points <= 1 or not section[line_start:c.start].lstrip().startswith(("-", "•")):
+            continue
+        logger.warning("acmg_points.cap_layer_pp1: PP1 %s from one parent — capped to [Supporting, +1]", c.tag())
+        start = c.start
+        while start > line_start and section[start - 1] in "*_":  # "**PP1_Strong**" markup, read into tag_end
+            start -= 1
+        section = section[:start] + "PP1 [Supporting, +1]" + section[c.tag_end:]
+        capped = True
+    dm = _MOI_DELTA_LINE_RE.search(section)
+    if capped and dm and float(dm.group(1)) > 1:
+        section = section[: dm.start(1)] + "+1" + section[dm.end(1):]
+    return section
 
 
 def splice_base_and_total(section: str, base_conclusion: str) -> str:

@@ -22,8 +22,7 @@ HARD GATE — READ THE GENE INHERITANCE MODE BEFORE APPLYING ANY X-LINKED
      as "confirmed XLR". Treat it exactly like AD_AR/XLD_XLR dual-mode: it
      does NOT satisfy this EXCLUDE rule's "ONLY reported mode is recessive"
      condition, so the rule CANNOT fire. This holds even if the gene is
-     textbook-associated with a recessive-sounding disease name (e.g. "X-linked
-     retinitis pigmentosa") or the phenotype predominantly affects males in
+     textbook-associated with a recessive-sounding disease name or the phenotype predominantly affects males in
      the general population — neither is the same as this specific backend
      call stating confirmed recessive-only inheritance for this case.
    - Do NOT let the reasoning stage's own prose override this check: if the

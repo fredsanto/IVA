@@ -65,8 +65,7 @@ INCLUDE requires evidence for BOTH:
    prose reasoning — the labeled block is the only place this verdict is
    decided, and it is not this stage's job to re-derive or second-guess it:
      - YES or PARTIAL -> CLOSED. Satisfied. Not up for re-evaluation. Do not
-       re-read the phenotype fit narrative, the craniofacial/dysmorphic/
-       secondary-cluster details, or anything else in the CLINICAL REASONING
+       re-read the phenotype fit narrative, the secondary-cluster details, or anything else in the CLINICAL REASONING
        above to second-guess this — Stage 1 already made this determination.
        Skip straight to criterion 2 (PROBABLE PATHOGENICITY) below; that is
        the ONLY remaining question for this variant.
@@ -102,11 +101,9 @@ INCLUDE requires evidence for BOTH:
    A literature hit only counts if it describes an actual gene-disease relationship
    (this gene causes/is associated with this disease or a genuine differential of it)
    — NOT a paper that merely contains a shared descriptive word while describing an
-   unrelated disease process. E.g. a paper about hypermethylation of gene X in
-   "vascular cognitive impairment" that happens to mention "visual and cognitive
-   deficits" as a symptom of that acquired/vascular condition is NOT a gene-phenotype
-   link for a patient being worked up for a primary genetic visual impairment — that
-   is keyword overlap, not a disease relationship, and does not satisfy criterion 1.
+   unrelated disease process (e.g. an acquired condition that lists a symptom the
+   patient shares) — that is keyword overlap, not a disease relationship, and does
+   not satisfy criterion 1.
    If the literature evidence itself states there is no direct link to the patient's
    specific phenotype (even while discussing the gene in some other disease context),
    treat criterion 1 as NOT met.
@@ -120,43 +117,24 @@ INCLUDE requires evidence for BOTH:
    phenotype match reported in EITHER block satisfies criterion 1 for that gene, even
    if only reported at the cohort/gene level rather than confirmed for this specific
    variant, and even if a different track for the same gene found only unrelated
-   conditions. A real past failure: a gene's own LitVar2 variant-level evidence
-   reported a cohort of patients with optic atrophy (a visual-impairment phenotype)
-   attributed to variants in that gene, but because the separate gene-level PubMed
-   track had turned up only unrelated neurodevelopmental-disorder papers, the case
-   was EXCLUDEd with "literature explicitly denies [gene] causes visual impairment" —
-   this is backwards: the optic-atrophy finding satisfies criterion 1 on its own; a
-   different track finding no match does not cancel it out. Cite the matching finding
+   conditions. A track finding no match does not cancel a match found by another
+   track. Cite the matching finding
    and note the variant-specific gap (not confirmed for this exact variant) as a
    caveat in the Exclude-case text, never as grounds to claim no gene-phenotype link
    exists at all.
 
    PARTIAL PHENOTYPE OVERLAP IS SUFFICIENT — do not require the literature to
    explain every listed clinical feature. A real patient's phenotype text often
-   lists findings from more than one distinct system/cluster (e.g. a
-   neurodevelopmental cluster — epilepsy, intellectual disability, autism —
-   AND a separate dysmorphic/skeletal cluster — specific facial features,
-   pectus excavatum, alopecia). Genetic syndromes are pleiotropic and
+   lists findings from more than one distinct system/cluster (cluster A and an
+   unrelated cluster B). Genetic syndromes are pleiotropic and
    variably-expressive; one gene explaining the core/major cluster of the
    presenting phenotype satisfies criterion 1 even when the literature says
    nothing about, or does not cover, a separate secondary cluster the patient
    also has. Do NOT exclude on the reasoning "literature does not describe
    the FULL combination of [feature A, B, C, D...]" when the gene's own
    literature affirmatively confirms the core cluster (A, B) — that is a
-   genuine, sufficient gene-phenotype link, not "no link." A real past
-   failure: a patient's phenotype combined a neurodevelopmental cluster
-   (cognitive deficit, autism, epilepsy) with a separate dysmorphic cluster
-   (partial alopecia, hypotelorism, frontal bossing, high-arched palate,
-   V-shaped maxilla, pectus excavatum). A candidate gene's own literature
-   affirmatively confirmed the neurodevelopmental cluster — "mutations in
-   this gene are associated with epilepsy and autism spectrum disorders" —
-   but did not describe the dysmorphic features, so the variant was EXCLUDEd
-   with "literature explicitly states [gene] does not cause this phenotype."
-   This is wrong: the literature never denied anything — it confirmed the
-   core cluster and was simply silent on the secondary one (the same
-   silence-is-not-denial principle above applies here too), and a single rare
-   LoF variant explaining even part of a multi-system phenotype is exactly
-   the kind of finding this stage exists to keep, not discard. Only exclude
+   genuine, sufficient gene-phenotype link, not "no link." Silence on a
+   secondary cluster is not denial. Only exclude
    on phenotype grounds when the gene's literature is silent on or
    contradicts EVERY cluster in the patient's phenotype, not merely a
    secondary one.
@@ -183,16 +161,13 @@ INCLUDE requires evidence for BOTH:
      (backend-determined)" block above — never from a mode claimed in prose
      evidence (a PubMed/websearch summary, a quoted OMIM sentence, or the
      CLINICAL REASONING narrative), any of which can misstate or conflict with
-     the backend-resolved mode. If that block reads AR or XLR: a single
-     heterozygous LoF variant with no second hit (no compound het, not
-     homozygous) is INSUFFICIENT on its own — treat as weak evidence, not
-     strong. If it reads AD, XLD, AD_AR, XLD_XLR, or UNDEFINED (no inheritance
-     signal in CSV field, CGD table, or retrieved evidence) — do NOT invoke this
-     recessive-insufficiency reasoning at all, even if some other part of the
-     evidence text calls the gene "autosomal recessive"; a rare heterozygous
-     variant with strong functional impact stands on its own signal strength.
-     UNDEFINED is not a default to recessive — treat it as no mode constraint
-     applying to this check, OR
+     the backend-resolved mode. If that block reads AR: a single heterozygous
+     variant with no second hit (no compound het, not homozygous) is never an
+     INCLUDE — see the EXCLUDE rule for single heterozygous variants below. If it
+     reads AD, XLD, AD_AR or XLD_XLR — do NOT invoke recessive-insufficiency
+     reasoning at all, even if some other part of the evidence text calls the
+     gene "autosomal recessive"; a rare heterozygous variant with strong
+     functional impact stands on its own signal strength, OR
    - Variant is homozygous, or compound heterozygous with a second variant in the
      same gene, in a known recessive gene with low population frequency, OR
      the variant is a loss-of-function type (frameshift, nonsense, canonical
@@ -211,12 +186,8 @@ INCLUDE requires evidence for BOTH:
      A low pLI / high LOEUF ("LoF-tolerant") is EXPECTED and NORMAL for a true
      recessive gene — population carriers of one LoF allele are unaffected by
      definition, so this metric is uninformative here, not contradictory
-     evidence. A real past failure: a homozygous frameshift in a gene the
-     evidence directly linked to the patient's phenotype, with 316 ClinVar P/LP
-     LoF entries for that gene, was EXCLUDEd for "gene is LoF-tolerant (low
-     pLI); homozygous LoF insufficient without strong functional proof" — this
-     is backwards and must never be repeated: do not cite pLI/LOEUF against a
-     homozygous or compound-het LoF call, OR
+     evidence. Do not cite pLI/LOEUF against a homozygous or compound-het LoF
+     call, OR
    - Confirmed or assumed DE NOVO (PS2/PM6 — AB data shows absent in both parents,
      or one parent untested) in a gene relevant to the phenotype is a STRONG
      pathogenicity signal, regardless of variant type (missense, LoF, etc.) — rank
@@ -270,42 +241,7 @@ otherwise support pathogenicity. Evaluate what IS present before deciding; note
 what's missing as a caveat in the Include-case/Exclude-case text, not as the
 deciding factor.
 
-Output exactly three lines and nothing else:
-Include-case: <strongest reason to include, ≤15 words>
-Exclude-case: <strongest reason to exclude, ≤15 words>
-Decision: INCLUDE or EXCLUDE
-
-Example output (strong case — known gene, LoF):
-Include-case: OMIM gene for phenotype; PVS1 VeryStrong nonsense variant
-Exclude-case: no variant-level functional data beyond prediction
-Decision: INCLUDE
-
-Example output (included — VUS but strong signals):
-Include-case: known LCA gene; homozygous VUS, very low AF, high CADD
-Exclude-case: ClinVar VUS, no functional study for this specific variant
-Decision: INCLUDE
-
-Example output (included — de novo missense outranks unresolved recessive het):
-Include-case: confirmed de novo missense (PS2), gene matches phenotype exactly
-Exclude-case: no ClinVar entry, prediction-only evidence
-Decision: INCLUDE
-
-Example output (excluded — single het LoF in recessive gene, no second hit):
-Include-case: rare LoF variant, CADD 32
-Exclude-case: heterozygous only in AR gene, no second variant, no compound-het evidence
-Decision: EXCLUDE
-
-Example output (excluded — missing gene link):
-Include-case: variant rare and predicted damaging by CADD
-Exclude-case: no gene-disease link for this phenotype; gene unrelated
-Decision: EXCLUDE
-
-Example output (excluded — common variant, no signal):
-Include-case: gene has some OMIM disease association
-Exclude-case: AF 3%, CADD 8, ClinVar Benign, no LoF mechanism
-Decision: EXCLUDE
-
-Example output (excluded — keyword-overlap literature, low-confidence ClinVar):
-Include-case: single-submitter no-criteria ClinVar Pathogenic label
-Exclude-case: literature link is tangential (unrelated disease mentions shared symptom word), gene LoF-tolerant, no real gene-phenotype relationship
-Decision: EXCLUDE
+Answer as a JSON object:
+- "include_case": the strongest reason to include, 15 words or fewer.
+- "exclude_case": the strongest reason to exclude, 15 words or fewer.
+- "decision": exactly "INCLUDE" or exactly "EXCLUDE".

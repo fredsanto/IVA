@@ -19,17 +19,22 @@ ALLELIC BALANCE CONFIRMATION (backend-determined — do not re-derive):
 
 TASK:
 
-1. This variant only qualifies for inherited-dominant analysis if SEGREGATION
-   above is "maternal" or "paternal" (i.e. genuinely inherited from one
-   identified parent, not de novo, not both-carriers/homozygous-parent). If
-   SEGREGATION is anything else, state explicitly that this variant does not
-   fit the inherited-dominant pattern and do not apply PP1.
+1. A dominant variant does not need segregation: SEGREGATION only decides
+   whether cosegregation (PP1) can be assessed, never whether the variant
+   is a dominant candidate. If SEGREGATION is "maternal", "paternal" or
+   "homozygous_parent" (a parent carries the variant), go on to rules 2-3.
+   For any other value (no parental data, tested parent(s) not carrying the
+   variant, or an unclear pattern), state "Segregation not informative —
+   base score stands", apply no PP1, and give delta +0. Never describe the
+   variant as not fitting a dominant pattern on segregation grounds.
 
-2. ALLELIC BALANCE CONFIRMATION above states whether BOTH the proband's own
-   AB and the transmitting parent's AB independently show a heterozygous
-   (~0.5) ratio. This is a QC/confidence gate on the het call itself — if
-   either is NOT confirmed heterozygous, do not proceed to apply PP1; state
-   the discrepancy explicitly instead.
+2. For "maternal" / "paternal": ALLELIC BALANCE CONFIRMATION above states
+   whether BOTH the proband's own AB and the transmitting parent's AB
+   independently show a heterozygous (~0.5) ratio. This is a QC/confidence
+   gate on the het call itself — if either is NOT confirmed heterozygous,
+   do not proceed to apply PP1; state the discrepancy explicitly instead.
+   For "homozygous_parent" there is no het check: go straight to rule 3
+   for that parent.
 
 3. If segregation and AB confirmation both hold, examine the evidence for
    whether the transmitting parent (or other relatives) is described as

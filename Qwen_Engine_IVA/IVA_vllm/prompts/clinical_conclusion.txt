@@ -10,9 +10,8 @@ phenotype.
 
 The findings above are grouped by MOI layer (e.g. "=== DE NOVO LAYER ===",
 "=== DOMINANT-INHERITED LAYER ===", "=== RECESSIVE LAYER ===", "=== X-LINKED
-LAYER ===", "=== UNCLASSIFIED ==="). Each block already carries its own
-"Total ACMG points: N → Classification" (or, for Unclassified, "ACMG points:
-N → Classification") — this is the already-computed base+layer-delta score;
+LAYER ==="). Each block already carries its own
+"Total ACMG points: N → Classification" — this is the already-computed base+layer-delta score;
 do not recompute or re-derive it. A variant's gene may qualify for more than
 one layer (e.g. an AD_AR gene may have blocks in both the DOMINANT-INHERITED
 and RECESSIVE layers) — ground every claim you make in something stated in
@@ -35,13 +34,16 @@ text, not inferred from score alone).
 
 STEP 1 — PHASE CHECK (mandatory, defense-in-depth): a compound-heterozygous
 RECESSIVE block (two different variants in one gene) states its own
-"**Phase:**" line (TRANS confirmed or UNKNOWN — this was determined
+"**Phase:**" line (TRANS confirmed, ASSUMED TRANS, or UNKNOWN — this was determined
 deterministically in code before the block was ever generated, and a CIS
 pair never produces a RECESSIVE layer block at all). Copy that "**Phase:**"
 line verbatim into your reasoning rather than re-deriving it. A homozygous
 RECESSIVE block has no "**Phase:**" line and needs none — both alleles carry
 the same variant. Never write a Phase value for a block that does not state
-one. If you see a RECESSIVE block whose own text
+one. ASSUMED TRANS means one of the two variants is de novo: report the pair
+as compound heterozygous, and state in that finding's prose that phase
+must be checked (parental testing cannot phase a de novo allele; long-read
+sequencing or cloning recommended). If you see a RECESSIVE block whose own text
 appears to contradict its stated Phase (e.g. describes both variants as
 "inherited from mother" while Phase says TRANS), treat this as a
 factual inconsistency in that block and note it explicitly rather than
@@ -49,7 +51,7 @@ silently trusting either value — do not synthesize a compound heterozygous
 finding from it in that case.
 
 CAUSATIVE THRESHOLD RULE (mandatory, applies uniformly to EVERY MOI layer —
-De Novo, Dominant-Inherited, Recessive, X-Linked, Unclassified — no layer gets
+De Novo, Dominant-Inherited, Recessive, X-Linked — no layer gets
 a different bar): a variant is CAUSATIVE, and MUST be listed in section 2, if
 its own layer/base block's total ACMG point value is >= 6 (Tavtigian et al.
 2020: 6-9 = Likely Pathogenic, >=10 = Pathogenic). This is a per-variant
@@ -126,9 +128,8 @@ block; a lower De Novo/Dominant-Inherited score for the same variant is not a
 contradiction; it is a different layer scoring different criteria, and the
 Recessive block's total is the one that makes the compound-het pair CAUSATIVE.
 A real past failure: a gene's Recessive block correctly computed "Joint
-compound-het classification: CAUSATIVE" with "Variant A: 6 pts, Variant B: 11
-pts; both >= 6" — but STEP 2 then wrote "Variant A: Total ACMG points = 4
-(<6). Not causative on its own," citing Variant A's separate De Novo/
+compound-het classification: CAUSATIVE" — but STEP 2 then called Variant A
+not causative on its own, citing Variant A's separate De Novo/
 Dominant-Inherited layer score (which never received the PM3 delta) instead
 of the Recessive block's own 6-point total, silently dropping Variant A from
 section 2 and reporting only Variant B as causative — directly contradicting
@@ -191,8 +192,7 @@ surprising, state that once in one sentence and move on — never re-sum it.
 
 SINGLE-HIT RECESSIVE CHECK (defense-in-depth, and an EXPLICIT EXCEPTION to
 the CAUSATIVE THRESHOLD RULE above — check this BEFORE trusting any block's
-own >=6-point total): if any UNCLASSIFIED block (or any layer block outside
-RECESSIVE) describes a heterozygous variant in a known AR/XLR gene with no
+own >=6-point total): if any layer block outside RECESSIVE describes a heterozygous variant in a known AR/XLR gene with no
 second variant/trans partner mentioned as causative, this variant is NEVER
 causative, regardless of what ACMG points total or classification label that
 block itself states — a het single-hit in a purely recessive gene cannot
@@ -205,7 +205,7 @@ this synthesis prompt exists to catch it if it didn't. A real past failure:
 a block for a heterozygous variant in an AR-only gene stated in its own
 Comment "this finding alone is insufficient to confirm a diagnosis... without
 a compound heterozygous or homozygous partner variant" one line below its own
-"ACMG points: 11 → Pathogenic" line — and that Pathogenic label, not the
+Pathogenic total — and that Pathogenic label, not the
 Comment next to it, was what got carried into section 2 as a causative
 finding. Do not repeat this: for every variant you are about to list in
 section 2, explicitly check its own zygosity and gene inheritance mode
@@ -307,11 +307,9 @@ it: never "CLINVAR: undefined", "unknown", or any placeholder.
    Naming the disease/condition this gene causes: use ONLY the disease name
    stated in THIS gene's own layer block — never borrow or generalize a
    disease name from a different gene discussed nearby, even when several
-   genes share a broad phenotype category (e.g. multiple genes each
-   contributing to "visual impairment" does NOT mean they share the same
-   specific disease — each keeps only what its own evidence names, e.g. one
-   gene's block may name "X-linked retinoschisis" while another's names
-   "retinitis pigmentosa"; do not let one bleed into the other's paragraph).
+   genes share a broad phenotype category (sharing a category does NOT mean
+   they share the same specific disease — each keeps only what its own
+   evidence names; do not let one bleed into the other's paragraph).
    If a gene's own block does not name a specific disease, do not invent one.
 
    Write a short prose paragraph (2-4 connected sentences, not bare bullet

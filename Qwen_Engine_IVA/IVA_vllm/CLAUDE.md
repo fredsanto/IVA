@@ -621,12 +621,9 @@ Compound heterozygous candidates (two or more variants in the same gene) are
 automatically exempted from DISCARD — a DISCARD decision on any such variant is
 overridden to KEEP.
 
-SLM output format:
-```
-Keep-case: <strongest reason to keep, ≤10 words>
-Discard-case: <strongest reason to discard, ≤10 words>
-Decision: KEEP or DISCARD
-```
+SLM answer: JSON `{keep_case, discard_case, decision}`, with `decision` constrained to
+`KEEP`/`DISCARD` at decoding time (`json_schema` → vLLM `response_format`) — never parsed
+from text. An SLM call failure defaults to KEEP.
 
 Results:
 - **KEEP** variants proceed to reasoning.
@@ -646,15 +643,12 @@ molecular mechanism → inheritance coherence → flags and uncertainties.
 **Call 2 — second triage** (`prompts/second_triage.txt`): takes the variant context
 and the reasoning from call 1 and emits a structured inclusion decision. Decoupling
 the decision from the narrative prevents the model from forcing a favourable outcome
-to justify speculative reasoning. `MAX_NEW_TOKENS_SCORING = 400` — budget is large
-enough to accommodate any residual thinking preamble before the three decision lines.
+to justify speculative reasoning.
 
-SLM output format for second triage:
-```
-Include-case: <strongest reason to include, ≤15 words>
-Exclude-case: <strongest reason to exclude, ≤15 words>
-Decision: INCLUDE or EXCLUDE
-```
+SLM answer for second triage: JSON `{include_case, exclude_case, decision}`, with
+`decision` constrained to `INCLUDE`/`EXCLUDE` at decoding time (`json_schema`). A single
+heterozygous variant in an autosomal recessive gene with no second variant is EXCLUDEd
+by the model (`prompts/second_triage_single_hit_recessive.txt`).
 
 The two outputs are concatenated (separated by `SECOND TRIAGE:`) before being stored,
 so the REASONING display section in the final output is self-contained.
@@ -663,6 +657,8 @@ Results:
 - **INCLUDE** variants proceed to cross-analysis and conclusion.
 - **EXCLUDE** variants are listed in the report appendix with their reasoning available
   in the REASONING section.
+- A gene whose mode of inheritance is unknown is forced EXCLUDE, and an included variant
+  that no MOI layer analyses is discarded — there is no unclassified layer.
 
 ### Stage 3 — Cross-analysis (`stages/cross_analysis.py`)
 

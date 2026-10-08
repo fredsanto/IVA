@@ -3,8 +3,7 @@ pipeline/stages/final_conclusion.py — Cross-MOI clinical conclusion stage (Lay
 
 The last synthesis stage. Reads the per-MOI-layer variant blocks produced by
 stages/moi_denovo.py, moi_dominant.py, moi_recessive.py, moi_xlinked.py (each
-already carrying its own base+delta ACMG total) plus any Unclassified base
-conclusions, and generates the short "# Clinical Conclusion" paragraph that
+already carrying its own base+delta ACMG total), and generates the short "# Clinical Conclusion" paragraph that
 closes the final report — now reasoning across MOI layers, not just across a
 flat variant list, since a patient can have independently-explanatory
 findings under different inheritance mechanisms (e.g. an AD_AR gene's variant
@@ -17,7 +16,7 @@ while the overall summary still has visibility across everything.
 Prompt loaded from prompts/clinical_conclusion.txt.
 
 Public API:
-    run(layer_outputs, unclassified_conclusions, patient_phenotype, llm) -> str
+    run(layer_outputs, patient_phenotype, llm) -> str
 """
 
 from __future__ import annotations
@@ -131,17 +130,13 @@ def _synthesize_layer(layer_name: str, blocks: list[str], patient_phenotype: str
 
 def _synthesize_layers_parallel(
     layer_outputs: dict[str, list[str]],
-    unclassified_conclusions: list[str],
     patient_phenotype: str,
     llm: "LLMClient",
 ) -> dict[str, str]:
-    """Fan out one MAP call per non-empty layer (including Unclassified as
-    its own pseudo-layer), concurrently. Returns {layer_name: synthesized
+    """Fan out one MAP call per non-empty layer, concurrently. Returns {layer_name: synthesized
     text}; a layer with no blocks at all is simply absent from the result —
     never represented by an empty or fabricated entry."""
     jobs: dict[str, list[str]] = {name: blocks for name, blocks in layer_outputs.items() if blocks}
-    if unclassified_conclusions:
-        jobs["Unclassified"] = unclassified_conclusions
     if not jobs:
         return {}
 
@@ -167,11 +162,7 @@ def _build_layers_text_from_synth(layer_synth: dict[str, str]) -> str:
     for name, text in layer_synth.items():
         if not text or not text.strip():
             continue
-        if name == "Unclassified":
-            header = "=== UNCLASSIFIED (no MOI-specific analysis; base ACMG score only) ==="
-        else:
-            header = f"=== {name.upper()} LAYER ==="
-        parts.append(f"{header}\n\n{text.strip()}")
+        parts.append(f"=== {name.upper()} LAYER ===\n\n{text.strip()}")
     return "\n\n---\n\n".join(parts)
 
 
@@ -189,86 +180,6 @@ def _build_actionable_text(actionable_variants: list[dict] | None) -> str:
             f"zygosity: {v['zygosity']}; classification: {v['classification']}"
         )
     return "\n".join(lines)
-
-
-# ── Deterministic single-hit-recessive false-positive cap ──────────────────
-#
-# prompts/conclusion.txt's RECESSIVE SINGLE-HIT CHECK already tells the base
-# conclusion to write "insufficient data" in Inheritance check and refuse to
-# call the variant causative in its Comment — but a real observed failure
-# showed the model can write that correct prose and then still compute a
-# normal, uncapped "Total ACMG points: 11 → Pathogenic" line one sentence
-# later, and a downstream stage reads that label, not the prose next to it.
-# This mirrors recompute_and_fix_totals()'s role (fixing a block's own stated
-# number deterministically, in Python, before anything downstream trusts it)
-# but for a self-contradiction between a block's own text and its own label
-# rather than an arithmetic error.
-_SINGLE_HIT_RECESSIVE_SIGNAL_RE = re.compile(
-    r"insufficient (?:data|to confirm a diagnosis)[^\n]*"
-    r"(?:recessive gene|second (?:variant|allele|hit)|compound heterozygous or homozygous partner)"
-    r"|no second (?:variant|allele|hit)[^\n]*identified"
-    r"|single heterozygous hit",
-    re.IGNORECASE,
-)
-# NOTE: the regex above only fires on the base block's OWN insufficiency
-# language (see docstring below) — it does NOT re-derive gene inheritance
-# mode independently. A real observed failure: a heterozygous de novo variant
-# in a gene PRIOR REASONING had already called Autosomal Recessive was
-# instead described in the block's own Inheritance check as "autosomal
-# dominant motor neuron disease... a single hit is possible for dominant
-# conditions" — the model re-labeled the gene's mode to dodge this exact
-# signal, and de novo status (PS2) does not change that a single heterozygous
-# hit in an AR/XLR gene is still one allele, not two. prompts/conclusion.txt's
-# RECESSIVE SINGLE-HIT CHECK now explicitly forbids re-deriving the gene mode
-# here, but if a block still manages to do so, this regex will not catch it —
-# same limitation as the "reasoned incorrectly and never flagged it" case
-# documented in the docstring below.
-_PATHOGENIC_TOTAL_LINE_RE = re.compile(
-    r"\*\*(?:Total )?ACMG points:\*\*\s*[-+]?\d+(?:\.\d+)?\s*→\s*"
-    r"(?:Likely Pathogenic|Pathogenic)\b",
-)
-
-
-def _cap_single_hit_recessive_false_positives(blocks: list[str]) -> list[str]:
-    """
-    For each Unclassified base-conclusion block: if its own text carries the
-    RECESSIVE SINGLE-HIT CHECK's insufficiency language (a heterozygous
-    single hit in an AR/XLR gene, no second allele) alongside an uncapped
-    Pathogenic/Likely Pathogenic total line, mechanically downgrade BOTH the
-    numeric points value and the label before this block is ever rendered
-    into the synthesis prompt or scanned by _qualifying_causative_findings()
-    — replacing only the label and leaving the original number (e.g. "11 →
-    Uncertain Significance") would still read as >= 6 to that function's
-    purely numeric threshold check (_CAUSATIVE_THRESHOLD), silently
-    re-admitting the exact finding this is meant to block. Capped to 2 (below
-    both the causative threshold of 6 and the Notable-VUS floor of 4) since a
-    single-hit recessive finding contributes nothing toward explaining THIS
-    patient's phenotype under a recessive model, not merely "not quite
-    enough" — it does not belong in section 4 either. No-op on any block
-    that doesn't match both signals.
-
-    Deliberately text-pattern-based, not data-driven: whether this variant is
-    a het single-hit in a recessive-only gene is exactly the judgment the
-    model's own prompt (RECESSIVE SINGLE-HIT CHECK, prompts/conclusion.txt)
-    already asks the model to reason through and state — zygosity, gene mode,
-    and presence/absence of a second hit are all in front of it. This
-    function is a consistency check on that reasoning (does the printed
-    score match the insufficiency the model itself already wrote?), not a
-    replacement for it — it never fires on a block that doesn't contain the
-    model's own insufficiency language, so a block where the model reasoned
-    incorrectly and never flagged the problem at all is not caught here.
-    """
-    fixed = []
-    for block in blocks:
-        if _SINGLE_HIT_RECESSIVE_SIGNAL_RE.search(block) and _PATHOGENIC_TOTAL_LINE_RE.search(block):
-            block = _PATHOGENIC_TOTAL_LINE_RE.sub(
-                "**ACMG points:** 2 → Uncertain Significance (VUS) [capped from an "
-                "uncapped Pathogenic/Likely Pathogenic total — single heterozygous "
-                "hit in a recessive gene, no second allele]",
-                block,
-            )
-        fixed.append(block)
-    return fixed
 
 
 # ── Deterministic causative-list completeness check ─────────────────────────
@@ -292,11 +203,11 @@ _JOINT_STATUS_RE = re.compile(
 
 
 def _qualifying_causative_findings(
-    layer_outputs: dict[str, list[str]], unclassified_conclusions: list[str]
+    layer_outputs: dict[str, list[str]]
 ) -> list[dict]:
     """
     Collect every variant the CAUSATIVE THRESHOLD RULE requires in section 2:
-    any block (De Novo / Dominant-Inherited / X-Linked / Unclassified / a
+    any block (De Novo / Dominant-Inherited / X-Linked / a
     homozygous-solo Recessive block) whose own final total is >= 6 points, or
     both variants of a compound-het PAIR block whose own "Joint compound-het
     classification" line says CAUSATIVE — never a COMPOUND VUS pair, even
@@ -340,8 +251,6 @@ def _qualifying_causative_findings(
     for layer_name, blocks in layer_outputs.items():
         for block in blocks:
             _process(block, layer_name)
-    for block in unclassified_conclusions:
-        _process(block, "Unclassified")
     return findings
 
 
@@ -363,7 +272,6 @@ def _missing_from_section_2(text: str, findings: list[dict]) -> list[dict]:
 def _enforce_causative_completeness(
     text: str,
     layer_outputs: dict[str, list[str]],
-    unclassified_conclusions: list[str],
 ) -> str:
     """
     Append a mechanically-assembled addendum, right before section 3, for any
@@ -371,7 +279,7 @@ def _enforce_causative_completeness(
     LLM synthesis dropped. No-op (returns `text` unchanged) when nothing is
     missing.
     """
-    findings = _qualifying_causative_findings(layer_outputs, unclassified_conclusions)
+    findings = _qualifying_causative_findings(layer_outputs)
     missing = _missing_from_section_2(text, findings)
     if not missing:
         return text
@@ -555,7 +463,7 @@ _CDNA_RE = re.compile(r"c\.[^\s:;|(),]+")
 
 
 def _block_acmg_entries(
-    layer_outputs: dict[str, list[str]], unclassified_conclusions: list[str]
+    layer_outputs: dict[str, list[str]]
 ) -> list[dict]:
     """One entry per variant per layer block: gene, cDNA notations, the
     block's own criteria lines, and its final total/label. A compound-het
@@ -598,13 +506,12 @@ def _block_acmg_entries(
                 "lines":  lines,
                 "layer":  layer_name,
                 "causative_pair": causative_pair,
+                "pair": bool(joint_m),
             })
 
     for layer_name, blocks in layer_outputs.items():
         for block in blocks:
             _add(block, layer_name)
-    for block in unclassified_conclusions:
-        _add(block, "Unclassified")
     return entries
 
 
@@ -645,7 +552,6 @@ def _render_block_acmg(gene: str, finding_line: str, entries: list[dict]) -> lis
 def _insert_block_acmg(
     text: str,
     layer_outputs: dict[str, list[str]],
-    unclassified_conclusions: list[str],
 ) -> str:
     """
     Sections 2 and 4 of the Clinical Conclusion: drop every ACMG criterion,
@@ -655,7 +561,7 @@ def _insert_block_acmg(
     total → ...", from the completeness check or the deterministic fallback)
     are left as they are.
     """
-    entries = _block_acmg_entries(layer_outputs, unclassified_conclusions)
+    entries = _block_acmg_entries(layer_outputs)
     genes = sorted({e["gene"] for e in entries if e["gene"]}, key=len, reverse=True)
     finding_re = None
     if genes:
@@ -756,7 +662,6 @@ def _extract_variant_finding(block: str) -> dict | None:
 
 def _deterministic_fallback(
     layer_outputs: dict[str, list[str]],
-    unclassified_conclusions: list[str],
     patient_phenotype: str,
     actionable_text: str,
 ) -> str:
@@ -773,11 +678,6 @@ def _deterministic_fallback(
             if f:
                 f["layer"] = layer_name
                 findings.append(f)
-    for block in unclassified_conclusions:
-        f = _extract_variant_finding(block)
-        if f:
-            f["layer"] = "Unclassified"
-            findings.append(f)
 
     causative = [f for f in findings if f["points"] >= 6]
     vus       = [f for f in findings if 4 <= f["points"] < 6]
@@ -826,7 +726,6 @@ def _deterministic_fallback(
 
 def run(
     layer_outputs: dict[str, list[str]],
-    unclassified_conclusions: list[str],
     patient_phenotype: str,
     llm: "LLMClient",
     actionable_variants: list[dict] | None = None,
@@ -840,8 +739,6 @@ def run(
                            "Dominant-Inherited", "Recessive", "X-Linked"). Each
                            block already carries its own "Total ACMG points:
                            N → Classification" line (base + that layer's delta).
-        unclassified_conclusions: Base-layer-only conclusion blocks for included
-                           variants whose gene MOI never resolved to any layer.
         patient_phenotype: Free-text patient phenotype string from the request.
         llm:               Shared LLMClient instance.
         actionable_variants: ACMG SF actionable-gene findings (gene, hgvs,
@@ -857,14 +754,12 @@ def run(
     """
     logger.info("[FinalConclusion] Synthesising cross-MOI clinical conclusion...")
 
-    unclassified_conclusions = _cap_single_hit_recessive_false_positives(unclassified_conclusions)
-
     # Stage A — MAP: each layer synthesized independently/in parallel (see
     # _synthesize_layers_parallel's docstring). Replaces the previous direct
-    # _build_layers_text(layer_outputs, unclassified_conclusions) call, which
+    # _build_layers_text(layer_outputs) call, which
     # concatenated every raw block from every layer into one prompt.
     layer_synth = _synthesize_layers_parallel(
-        layer_outputs, unclassified_conclusions, patient_phenotype, llm,
+        layer_outputs, patient_phenotype, llm,
     )
     conclusions_text = _build_layers_text_from_synth(layer_synth)
 
@@ -911,7 +806,7 @@ def run(
 
         # Deterministic scan first (cheap, no SLM call): only fire the
         # reconcile pass when something is actually missing.
-        findings = _qualifying_causative_findings(layer_outputs, unclassified_conclusions)
+        findings = _qualifying_causative_findings(layer_outputs)
         missing = _missing_from_section_2(fixed, findings)
         if missing:
             reconciled = _reconcile_missing_causative(
@@ -923,11 +818,11 @@ def run(
         # Safety net either way: a no-op if the reconcile pass (or the
         # absence of any missing finding) already left nothing missing;
         # otherwise mechanically appends whatever still wasn't incorporated.
-        fixed = _enforce_causative_completeness(fixed, layer_outputs, unclassified_conclusions)
+        fixed = _enforce_causative_completeness(fixed, layer_outputs)
 
         # ACMG criteria/totals in sections 2 and 4 come from the layer
         # blocks, never from the model (see _insert_block_acmg).
-        return _insert_block_acmg(fixed, layer_outputs, unclassified_conclusions)
+        return _insert_block_acmg(fixed, layer_outputs)
 
     def _recover_from_malformed_draft() -> str:
         """
@@ -967,9 +862,9 @@ def run(
         )
         return _enforce_causative_completeness(
             _deterministic_fallback(
-                layer_outputs, unclassified_conclusions, patient_phenotype, actionable_text,
+                layer_outputs, patient_phenotype, actionable_text,
             ),
-            layer_outputs, unclassified_conclusions,
+            layer_outputs,
         )
 
     try:

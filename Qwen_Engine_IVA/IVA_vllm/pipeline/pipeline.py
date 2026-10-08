@@ -69,13 +69,13 @@ from pipeline.tools.autopvs1           import (
 )
 from pipeline.core.errors              import ToolFetchError, ToolParseError
 from pipeline.core.clinvar_reference   import (
-    append_clinvar_reference, add_clinvar_status_to_findings, clinvar_status_from_context,
+    clinvar_status_from_context,
 )
 from pipeline.core.acmg_ps3            import surface_ps3_citations
 from pipeline.core.acmg_case_ref       import apply_case_reference
 from pipeline.stages         import (
-    retrieval, reasoning, conclusion, cross_analysis, final_conclusion, first_triage,
-    moi_denovo, moi_dominant, moi_recessive, moi_xlinked, actionable,
+    retrieval, reasoning, conclusion, cross_analysis, clinical_report, first_triage,
+    moi_denovo, moi_dominant, moi_recessive, moi_xlinked,
 )
 
 logger = logging.getLogger(__name__)
@@ -778,6 +778,11 @@ class Pipeline:
                 "TRANS (different parents) — consistent with compound heterozygous "
                 "biallelic inheritance."
             ),
+            "denovo": (
+                "ASSUMED TRANS — one of the two variants is de novo, so parental "
+                "testing cannot phase the pair. Treat as compound heterozygous, "
+                "but state that phase must be checked."
+            ),
             "unknown": (
                 "UNKNOWN — phase not determinable from available parental "
                 "allelic-balance data. A compound-heterozygous model may still apply "
@@ -1036,7 +1041,8 @@ class Pipeline:
 
         def _overlap_one(i: int) -> tuple[int, str | None, str]:
             verdict, text = reasoning.run_phenotype_overlap(
-                patient_phenotype, phenotype_list_cache.get(i, "NA"), self._llm,
+                patient_phenotype, phenotype_list_cache.get(i, "NA"),
+                variants[i].get("Gene", ""), self._llm,
             )
             return i, verdict, text
 
@@ -1062,7 +1068,7 @@ class Pipeline:
         # literature/GeneReviews evidence, combined (AD and AR → AD_AR); CGD
         # only when all are silent. Before reasoning (Stage 2a), which needs
         # the mode and the compound-het groups built from it.
-        gene_mode_cache, gene_mode_reasoning_cache = moi.build_gene_mode_cache(
+        gene_mode_cache, gene_mode_reasoning_cache, gene_mode_sources_cache = moi.build_gene_mode_cache(
             variants, kept_indices,
             {i: _evidence_only_context(i) for i in kept_indices},
             phenotype_list_cache, overlap_text_cache,
@@ -1259,7 +1265,7 @@ class Pipeline:
             zyg_i = str(variants[i].get("Zygosity") or "").strip().lower()
             is_hom_or_hemi = "hom" in zyg_i or "hemi" in zyg_i
             is_purely_dominant_mode = gene_mode_cache.get(gene_i, "") in ("AD", "XLD")
-            combined = reasoning.run_second_triage(
+            combined, decision, justification = reasoning.run_second_triage(
                 variant_context=context_slices[i],
                 reasoning_text=reasoning_only[i] + _zygosity_note_block(i) + _cluster_match_block(i),
                 llm=self._llm,
@@ -1270,7 +1276,6 @@ class Pipeline:
                 include_compound_het_exception=bool(sib_block),
                 include_literature_evidence_quality=bool(litvar2_raw_by_variant.get(i)),
             )
-            decision, justification = reasoning.parse_inclusion_decision(combined)
             return i, combined, decision, justification
 
         workers = min(MAX_WORKERS_LLM, len(triage_targets))
@@ -1322,10 +1327,14 @@ class Pipeline:
         # ── ACMG SF override: force INCLUDE for actionable variants that reached
         #     a second-triage decision (reasoning_failed ones are left EXCLUDEd —
         #     there is no reasoning text to build a conclusion/report block from). ─
+        # sf_forced: these reach the MOI layers only to be scored — the clinical
+        # report never lists them as causative or VUS (clinical_report.py).
+        sf_forced: set[int] = set()
         for i in actionable_indices:
             if i in reasoning_failed or i not in kept_indices:
                 continue
             if inclusion_decisions.get(i) != "INCLUDE":
+                sf_forced.add(i)
                 logger.info(
                     "[Pipeline] Second-triage override: variant %d (%s) is an ACMG SF "
                     "actionable finding — forced INCLUDE", i + 1, variants[i].get("Gene", "?"),
@@ -1400,8 +1409,22 @@ class Pipeline:
                 )
                 inclusion_decisions[i] = "INCLUDE"
 
+        # ── Unknown-MOI gate: a gene whose mode of inheritance no source states
+        #     (Stage 1d mode "") cannot be analysed in any MOI layer — forced
+        #     EXCLUDE, whatever second triage or the ACMG SF override decided. ─
+        for i in kept_indices:
+            gene = variants[i].get("Gene", "NA")
+            if gene_mode_cache.get(gene, "") or inclusion_decisions.get(i) != "INCLUDE":
+                continue
+            logger.info("[Pipeline] Variant %d (%s): mode of inheritance unknown — forced EXCLUDE", i + 1, gene)
+            second_triage_justifications[i] = (
+                f"[mode of inheritance unknown — {gene_mode_reasoning_cache.get(gene, 'no source')} — "
+                f"original: INCLUDE: {second_triage_justifications.get(i, '')}]"
+            )
+            inclusion_decisions[i] = "EXCLUDE"
+
         # ── Inclusion split (direct from second_triage decisions) ────────────
-        include_indices = [i for i in kept_indices if inclusion_decisions.get(i) == "INCLUDE"]
+        include_indices =[i for i in kept_indices if inclusion_decisions.get(i) == "INCLUDE"]
         exclude_indices = [i for i in kept_indices if inclusion_decisions.get(i) == "EXCLUDE"]
 
         logger.info(
@@ -1495,9 +1518,9 @@ class Pipeline:
                     # above: a malformed conclusion (e.g. SLMError from
                     # conclusion.py's ACMG-criteria-section check) must not
                     # silently disappear — record it as a visible failure note
-                    # (surfaced in the Unclassified appendix below, since
-                    # conclusion_failed indices are excluded from every MOI
-                    # layer target list that reads conclusions[i]) instead of
+                    # (conclusion_failed indices are excluded from every MOI
+                    # layer target list that reads conclusions[i], so they end
+                    # up discarded with the no-MOI-layer variants) instead of
                     # feeding broken/incomplete text into moi_denovo etc.,
                     # which can only copy criteria verbatim, never invent them.
                     logger.error(
@@ -1538,13 +1561,13 @@ class Pipeline:
         #     parents; the moi_xlinked layer only ever adds PP1, never PS2,
         #     so without this a confirmed-de-novo X-linked variant would get
         #     zero credit for that despite trio data confirming it.
-        #     Also requires SOME parental AB data (trio or one parent): the
-        #     prompt's own rule 3 says PS2/PM6 can NEVER apply when parental
-        #     data is "none" — running the layer anyway on a singleton just
-        #     produces a boilerplate "de novo status unassessed" section for
-        #     every AD-relevant variant in every singleton case, which is
-        #     exactly the redundant-MOI-section clutter this gate exists to
-        #     avoid.) ──────────────────────────────────────────────────────
+        #     Also requires a full trio (both parents' AB): PS2/PM6 need both
+        #     parents tested — a variant absent in the one tested parent of a
+        #     duo may come from the untested one — so on a duo or singleton
+        #     the layer could only ever produce a "+0, de novo unassessable"
+        #     section. And only segregation "de_novo": every other AD-relevant
+        #     variant goes to Layer 4 instead, so each variant gets exactly
+        #     one de novo-or-dominant block.) ───────────────────────────────
         denovo_genes = {
             g for g, m in gene_mode_cache.items()
             if m in ("AD", "AD_AR", "XLD", "XLR", "XLD_XLR", "XL")
@@ -1559,7 +1582,8 @@ class Pipeline:
         denovo_targets = [
             i for i in include_indices
             if variants[i].get("Gene", "NA") in denovo_genes
-            and any(_parental_ab_presence(i))
+            and _parental_ab_presence(i)[0]
+            and segregation_cache[i] == "de_novo"
             and i not in conclusion_failed
         ]
         denovo_outputs: dict[int, str] = {}
@@ -1594,26 +1618,23 @@ class Pipeline:
                         i + 1, variants[i].get("Gene", "?"),
                     )
 
-        # ── Layer 4: dominant-inherited (AD / AD_AR / XLD only — narrower than
-        #     Layer 3's de novo gene set. "Cosegregation with an affected
-        #     parent" framing doesn't fit XLR/XL genes, which Layer 3 now
-        #     covers for de novo purposes but Layer 4 deliberately excludes.
-        #     Also requires segregation to actually be "maternal" or
-        #     "paternal": the prompt's own rule 1 says PP1 can NEVER apply
-        #     otherwise (de_novo, insufficient_data, uncertain, both_carriers,
-        #     homozygous_parent all fall through to the same "does not fit,
-        #     no PP1" boilerplate) — gating here on the same condition the
-        #     prompt already gates on avoids paying for an LLM call whose
-        #     output is 100% predictable, and avoids a redundant
-        #     DOMINANT-INHERITED section on every AD-relevant variant in
-        #     every singleton (no-parent-data) case, which was the actual
-        #     bulk of the "still see dominant" reports — not just the
-        #     confirmed-de-novo case this gate originally only covered.) ──
-        dominant_genes = {g for g, m in gene_mode_cache.items() if m in ("AD", "AD_AR", "XLD")}
+        # ── Layer 4: dominant-inherited (AD / AD_AR only — narrower than Layer 3's
+        #     de novo gene set. chrX genes never enter this layer: XLD/XLR/XL
+        #     are handled by Layer 6 (X-linked) only; Layer 3 still covers
+        #     them for de novo purposes.) No segregation
+        #     condition: a dominant variant does not need segregation — it only
+        #     adds PP1 / BS2. Singletons and duos with a non-carrier parent
+        #     land here at their base score; with no unclassified layer they
+        #     would otherwise be discarded. Segregation "de_novo" is left to
+        #     Layer 3 (PS2) — one block per variant. ────────────────────────
+        dominant_genes = {
+            g for g, m in gene_mode_cache.items()
+            if m in ("AD", "AD_AR") and gene_chrom_cache.get(g) != "X"
+        }
         dominant_targets = [
             i for i in include_indices
             if variants[i].get("Gene", "NA") in dominant_genes
-            and segregation_cache[i] in ("maternal", "paternal")
+            and segregation_cache[i] != "de_novo"
             and i not in conclusion_failed
         ]
         dominant_outputs: dict[int, str] = {}
@@ -1649,11 +1670,15 @@ class Pipeline:
                         i + 1, variants[i].get("Gene", "?"),
                     )
 
-        # ── Layer 5: recessive / compound-het (AR / XLR / AD_AR / XLD_XLR
-        #     genes, >=2 included variants, TRANS-gated in Python BEFORE any
-        #     LLM call — a CIS pair never reaches moi_recessive.run_pair) ────
+        # ── Layer 5: recessive / compound-het (AR / AD_AR genes, >=2 included
+        #     variants, TRANS-gated in Python BEFORE any LLM call — a CIS pair
+        #     never reaches moi_recessive.run_pair). chrX genes never enter
+        #     this layer: XLR is handled by Layer 6 (X-linked) only — a
+        #     hemizygous male is not a homozygous AR proband. ────────────────
         recessive_gene_groups_included: dict[str, list[int]] = {}
         for gene, idxs in recessive_gene_groups.items():
+            if gene_chrom_cache.get(gene) == "X":
+                continue
             kept_and_included = [i for i in idxs if i in include_set and i not in conclusion_failed]
             if len(kept_and_included) >= 2:
                 recessive_gene_groups_included[gene] = kept_and_included
@@ -1705,12 +1730,13 @@ class Pipeline:
         #     recessive-relevant gene with no compound-het partner (gene never
         #     reached the >=2-variant group above). Homozygosity alone
         #     satisfies the biallelic requirement, so these belong in the
-        #     Recessive layer, not the Unclassified appendix. ─────────────────
+        #     Recessive layer rather than being discarded. ─────────────────────
         homozygous_solo_indices: set[int] = set()
         homozygous_solo_targets = [
             i for i in include_indices
             if gene_mode_cache.get(variants[i].get("Gene", "NA")) in ("AR", "XLR", "AD_AR", "XLD_XLR")
             and moi.zygosity_is_confirmed_hom(variants[i].get("Zygosity", ""))
+            and gene_chrom_cache.get(variants[i].get("Gene", "NA")) != "X"
             and variants[i].get("Gene", "NA") not in recessive_gene_groups_included
             and i not in conclusion_failed
         ]
@@ -1768,6 +1794,7 @@ class Pipeline:
                 base_conclusion=conclusions[i],
                 xlinked_pattern=pattern,
                 segregation=seg,
+                gene_mode=gene_mode_cache.get(variants[i].get("Gene", "NA"), ""),
                 llm=self._llm,
             )
 
@@ -1799,11 +1826,17 @@ class Pipeline:
             | homozygous_solo_indices
             | set(xlinked_outputs)
         )
-        unclassified_indices = [i for i in include_indices if i not in moi_covered_indices]
-        unclassified_conclusions = [
-            append_clinvar_reference(conclusions[i], context_slices[i])
-            for i in unclassified_indices
-        ]
+        # No MOI layer analysed it → discarded (there is no unclassified layer).
+        for i in [i for i in include_indices if i not in moi_covered_indices]:
+            logger.info("[Pipeline] Variant %d (%s): no MOI layer applies — discarded",
+                        i + 1, variants[i].get("Gene", "?"))
+            second_triage_justifications[i] = (
+                f"[no MOI layer applies to this variant — discarded — original: INCLUDE: "
+                f"{second_triage_justifications.get(i, '')}]"
+            )
+            inclusion_decisions[i] = "EXCLUDE"
+            exclude_indices.append(i)
+        include_indices = [i for i in include_indices if i in moi_covered_indices]
 
         # ── ACMG SF actionable variants (built here, before final_conclusion, so
         #     the Clinical Conclusion prose can name them in its own dedicated
@@ -1830,25 +1863,23 @@ class Pipeline:
             if i in conclusions
         ]
 
-        final_summary = final_conclusion.run(
+        # Clinical Conclusion: code picks each section's variants and gathers
+        # their sourced facts, the model writes the text (clinical_report.py).
+        final_summary = clinical_report.run(
+            patient_phenotype=patient_phenotype,
+            variants=variants,
             layer_outputs=layer_outputs_for_summary,
-            unclassified_conclusions=unclassified_conclusions,
-            patient_phenotype=patient_phenotype,
-            actionable_variants=actionable_flagged,
-            llm=self._llm,
-        )
-        # CLINVAR status next to every finding in sections 2-4 (causative,
-        # actionable, notable VUS), from each variant's own ClinVar evidence.
-        final_summary = add_clinvar_status_to_findings(final_summary, [
-            (variants[i].get("Gene", "NA"),
-             variants[i].get("HGVS", variants[i].get("Variant", "")),
-             clinvar_status_from_context(context_slices[i]))
-            for i in conclusions
-        ])
-
-        actionable_section = actionable.run(
-            flagged=actionable_flagged,
-            patient_phenotype=patient_phenotype,
+            include_indices=include_indices,
+            sf_forced=sf_forced,
+            cluster_match=cluster_match_cache,
+            phenotype_lists=phenotype_list_cache,
+            overlap_texts=overlap_text_cache,
+            gene_modes=gene_mode_cache,
+            gene_mode_sources=gene_mode_sources_cache,
+            evidence={i: _evidence_only_context(i) for i in conclusions},
+            segregation=segregation_cache,
+            clinvar_status={i: clinvar_status_from_context(context_slices[i]) for i in conclusions},
+            actionable_flagged=actionable_flagged,
             llm=self._llm,
         )
 
@@ -1905,10 +1936,8 @@ class Pipeline:
         # same _classification_rank regex, which matches "ACMG points" anywhere
         # in the text so it works unchanged on each layer's own "Total ACMG
         # points: N → Classification" line), a variant appearing in multiple
-        # qualifying layers shown in full in each (not deduplicated), an
-        # Unclassified appendix for variants whose gene MOI never resolved to
-        # any layer, then the cross-MOI Clinical Conclusion + the pre-existing
-        # exclude/discard appendix (unrelated, untouched).
+        # qualifying layers shown in full in each (not deduplicated), then the
+        # cross-MOI Clinical Conclusion and the actionable findings.
         moi_sections = "".join([
             _build_moi_section("DE NOVO ANALYSIS", list(denovo_outputs.values())),
             _build_moi_section("DOMINANT-INHERITED ANALYSIS", list(dominant_outputs.values())),
@@ -1917,7 +1946,6 @@ class Pipeline:
                 [block for blocks in recessive_outputs.values() for block in blocks],
             ),
             _build_moi_section("X-LINKED ANALYSIS", list(xlinked_outputs.values())),
-            _build_moi_section("UNCLASSIFIED — NO MOI-SPECIFIC ANALYSIS", unclassified_conclusions),
         ])
 
         gene_evidence_table = _build_gene_evidence_table(
@@ -1929,6 +1957,8 @@ class Pipeline:
             if gene_evidence_table else ""
         )
 
+        # Order: MOI layers, then the Clinical Conclusion, then the actionable
+        # (ACMG SF) findings, which close the report.
         final_report = (
             gene_evidence_section
             + moi_sections
@@ -1940,23 +1970,21 @@ class Pipeline:
         # it from the validated Stage-4 PS3 line so the reader always sees it.
         final_report = surface_ps3_citations(final_report, list(conclusions.values()))
 
-        if actionable_section:
-            final_report += (
-                f"\n{SEP_VARIANT}\nACTIONABLE VARIANTS (ACMG SF)\n{SEP_VARIANT}\n\n{actionable_section}\n"
-            )
 
+        # Excluded/discarded variants go before the FINAL REPORT, not inside it.
         # Not gated on triage_ran: the proband-AB-artifact gate can populate
         # discarded_indices even when n <= TRIAGE_ENABLED_THRESHOLD (SLM
         # triage skipped) — those discards must still be visible in the
         # appendix, not silently dropped from the report.
+        appendix_section = ""
         if exclude_indices or discarded_indices:
-            final_report += _build_report_appendix(
+            appendix_section = _build_report_appendix(
                 exclude_indices=exclude_indices,
                 discarded_indices=discarded_indices,
                 triage_results=triage_results,
                 variants=variants,
                 conclusions=conclusions,
-            )
+            ).strip() + "\n\n"
 
         output = (
             (f"{SEP}\nCOLUMN HEADER INTERPRETATION\n{SEP}\n{header_mapping_summary}\n\n"
@@ -1968,6 +1996,7 @@ class Pipeline:
             + full_context_display + "\n\n"
             + f"{SEP}\nREASONING\n{SEP}\n"
             + reasoning_display + "\n\n"
+            + appendix_section
             + f"{SEP}\nFINAL REPORT\n{SEP}\n"
             + final_report + "\n"
         )

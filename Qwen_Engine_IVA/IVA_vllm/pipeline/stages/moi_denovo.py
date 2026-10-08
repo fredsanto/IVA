@@ -2,8 +2,9 @@
 pipeline/stages/moi_denovo.py — MOI Layer 3: de novo analysis.
 
 For variants whose gene has a dominant-relevant inheritance mode (AD, AD_AR,
-XLD). Adds PS2 (confirmed de novo) or PM6 (assumed de novo, one parent only)
-on top of the Layer 2 base ACMG score — never re-scores base criteria.
+XLD). Adds PS2 (confirmed de novo) or PM6 (assumed de novo) on top of the
+Layer 2 base ACMG score — never re-scores base criteria. Both require BOTH
+parents tested: without a trio the delta is forced to +0 in code.
 
 Prompt loaded from prompts/moi_denovo.txt.
 
@@ -14,6 +15,7 @@ Public API:
 from __future__ import annotations
 
 import logging
+import re
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -30,6 +32,9 @@ logger = logging.getLogger(__name__)
 _PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "moi_denovo.txt"
 
 MAX_NEW_TOKENS_DENOVO = 700
+
+_PS2_PM6_BULLET_RE = re.compile(r"(?m)^[ \t]*[-*][ \t]*\**(?:PS2|PM6)\b[^\n]*\n?")
+_DENOVO_DELTA_RE = re.compile(r"(?mi)^\*\*De novo delta:\*\*[^\n]*$")
 
 
 def _load_prompt() -> str:
@@ -86,6 +91,14 @@ def run_one(
         user=user_prompt,
         max_tokens=MAX_NEW_TOKENS_DENOVO,
     )
+    # PS2/PM6 need both parents tested — a variant absent in the one tested
+    # parent may come from the untested one. Without a trio, drop any PS2/PM6
+    # bullet and force the delta to +0, whatever the model wrote.
+    if not has_trio:
+        result = _PS2_PM6_BULLET_RE.sub("", result)
+        result = _DENOVO_DELTA_RE.sub(
+            "**De novo delta:** +0 (PS2/PM6 require both parents tested)", result, count=1
+        )
     # Base criteria + Total come from code, never from the model: splice the
     # Stage-4 base block, then (after BS2 below) Total = base + delta.
     result = splice_base_and_total(result, base_conclusion)

@@ -1,12 +1,12 @@
 """
 pipeline/stages/moi_dominant.py — MOI Layer 4: dominant-inherited analysis.
 
-For variants whose gene has a dominant-relevant inheritance mode (AD, AD_AR,
-XLD), where segregation indicates the variant was inherited from an identified
-parent (not de novo). Adds PP1 (cosegregation) on top of the Layer 2 base ACMG
-score when BOTH the proband's own AB and the transmitting parent's AB confirm
-a genuine heterozygous (~0.5) call, and family-history evidence supports the
-transmitting parent being affected — never re-scores base criteria.
+For every included variant whose gene has a dominant-relevant inheritance
+mode (AD, AD_AR, XLD), whatever the segregation: segregation is evidence, never
+an entry condition. Adds PP1 (cosegregation) on top of the Layer 2 base ACMG
+score when a parent carries the variant (het confirmed by both ABs, or
+homozygous) and family-history evidence supports that parent being affected;
+otherwise +0 and the base score stands — never re-scores base criteria.
 
 Prompt loaded from prompts/moi_dominant.txt.
 
@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING
 
 from pipeline.core.citations import validate_citations
 from pipeline.core.clinvar_reference import append_clinvar_reference
-from pipeline.core.acmg_points import resync_moi_total, splice_base_and_total
+from pipeline.core.acmg_points import cap_layer_pp1, resync_moi_total, splice_base_and_total
 from pipeline.core.acmg_bs2_dominant import validate_bs2_unaffected_dominant_carrier
 
 if TYPE_CHECKING:
@@ -47,8 +47,10 @@ def _ab_confirmation_block(segregation: str, proband_ab_class: str, transmitting
     transmitting parent's AB must independently classify as "het" (~0.5) for
     this to read as confirmed. Per user spec: BOTH values are checked, not
     just one."""
+    if segregation == "homozygous_parent":
+        return f"Proband AB class: {proband_ab_class} | a parent is HOMOZYGOUS for this variant (AB ~1.0)"
     if segregation not in ("maternal", "paternal"):
-        return f"Not applicable — segregation is '{segregation}', not maternal/paternal inheritance."
+        return f"Not applicable — segregation is '{segregation}', no parent shown to carry the variant."
     parent_label = "mother" if segregation == "maternal" else "father"
     confirmed = proband_ab_class == "het" and transmitting_parent_ab_class == "het"
     return (
@@ -100,6 +102,8 @@ def run_one(
     )
     # Base criteria + Total come from code, never from the model: splice the
     # Stage-4 base block, then (after BS2 below) Total = base + delta.
+    # PP1 here rests on one transmitting parent: Supporting at most.
+    result = cap_layer_pp1(result)
     result = splice_base_and_total(result, base_conclusion)
     # Mechanical DEFAULT-UNAFFECTED-POLICY BS2 check, before resync so the
     # inserted bullet gets folded into the Base/Total point lines below —

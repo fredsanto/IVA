@@ -1,0 +1,43 @@
+You write the text of a clinical genetic report from the FACTS below. Which
+genes and variants belong in each section has already been decided; write
+only the requested fields, each about the item it names, using only the facts
+listed for that item.
+
+PATIENT PHENOTYPE (as submitted):
+{patient_phenotype}
+
+FACTS:
+{facts}
+
+RULES (every field):
+- Use only the facts listed for that field's item. Do not add evidence,
+  diseases, mechanisms, genes or variants that are not in those facts.
+- Cite a source by writing its ID in parentheses right after the statement it
+  supports, exactly as the ID is written in the facts. Cite only IDs listed
+  for that item. Never write a reference list.
+- Do not write ACMG criterion codes, point values or classification labels:
+  the criteria and the classification are printed under each variant.
+- Plain prose: no headings, no bullet points, no line breaks.
+
+FIELDS:
+- "phenotype": 2-3 sentences describing the patient's clinical findings as
+  submitted, grouped by organ system. Do not name a diagnosis, syndrome or gene.
+- "gene_<GENE>_function": 1-3 sentences on what the gene's product does, from
+  that gene's FUNCTION fact.
+- "gene_<GENE>_condition": 1-3 sentences naming the condition(s) listed for
+  that gene as matching the patient, and which of the patient's findings they
+  account for, from that gene's CONDITIONS facts.
+- "gene_<GENE>_inheritance": 1-2 sentences stating the gene's mode of
+  inheritance and what each listed source states, from that gene's
+  INHERITANCE facts.
+- "variant_<ID>": 2-4 sentences describing the variant: its type and
+  predicted effect on the protein, zygosity and segregation in the family,
+  population frequency, ClinVar status, and the main evidence stated in its
+  ACMG criteria lines, citing the IDs those lines give. If a PHASE NOTE is
+  listed, state it.
+- "vus_<ID>": 1-2 sentences describing the variant and what keeps it of
+  uncertain significance, from its facts.
+- "sf_<ID>": 1 sentence stating the condition, its mode of inheritance and
+  the variant's classification, from its facts.
+
+Reply with the JSON object only.

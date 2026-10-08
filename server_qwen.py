@@ -45,7 +45,7 @@ _PIPELINE_SERVER_URL = os.environ.get(
 )
 _BACKEND = os.environ.get("PIPELINE_BACKEND", "proxy")
 
-_ERC_FOLDER = _SCRIPT_DIR / "Qwen_Engine_IVA" / "IVA_vllm"
+_PIPELINE_DIR = _SCRIPT_DIR / "Qwen_Engine_IVA" / "IVA_vllm"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -98,7 +98,7 @@ def _pipeline_accessible() -> bool:
     """Check if the pipeline module can be imported directly."""
     try:
         import sys
-        sys.path.insert(0, str(_ERC_FOLDER))
+        sys.path.insert(0, str(_PIPELINE_DIR))
         import pipeline.pipeline  # noqa: F401
         return True
     except Exception:
@@ -314,7 +314,7 @@ async def _run_direct_impl(job_id: str, csv_bytes: bytes, filename: str, phenoty
     _active_job_id = job_id
     import sys
     import threading
-    sys.path.insert(0, str(_ERC_FOLDER))
+    sys.path.insert(0, str(_PIPELINE_DIR))
 
     from pipeline.core.normalizer import normalize_upload
     from pipeline.pipeline import Pipeline

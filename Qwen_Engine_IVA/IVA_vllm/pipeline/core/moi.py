@@ -21,6 +21,7 @@ Public API:
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -34,17 +35,40 @@ logger = logging.getLogger(__name__)
 
 MAX_WORKERS_MODE_CLASSIFICATION = 16
 MAX_NEW_TOKENS_MODE_CLASSIFICATION = 500
+MAX_NEW_TOKENS_QUOTE_CHECK = 200
 
 _MODE_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "moi_condition_classification.txt"
+_QUOTE_CHECK_PROMPT_PATH = Path(__file__).parent.parent.parent / "prompts" / "moi_quote_check.txt"
 
-# The literature reading answers each mode on its own line ("Dominant: YES
-# "<quote>" | NO"); these are the line labels and the mode each one reports.
-_MODE_LINE_LABELS = {
-    "dominant": "AD",
-    "recessive": "AR",
-    "x-linked recessive": "XLR",
-    "x-linked dominant": "XLD",
-    "x-linked unspecified": "XL",
+# The model, not string matching, decides whether a quote is in the evidence.
+_QUOTE_CHECK_SCHEMA = {
+    "type": "object",
+    "properties": {"reasoning": {"type": "string"},
+                   "in_evidence": {"type": "string", "enum": ["YES", "NO"]}},
+    "required": ["reasoning", "in_evidence"],
+}
+
+# The literature reading answers each mode as one field of a JSON object whose
+# shape is enforced at decoding time (vLLM constrained decoding): "YES" or "NO"
+# plus the verbatim quote behind a YES. Field name -> (label, mode).
+_MODE_FIELDS = {
+    "dominant":             ("Dominant", "AD"),
+    "recessive":            ("Recessive", "AR"),
+    "x_linked_recessive":   ("X-linked recessive", "XLR"),
+    "x_linked_dominant":    ("X-linked dominant", "XLD"),
+    "x_linked_unspecified": ("X-linked unspecified", "XL"),
+}
+_MODE_ANSWER_SCHEMA = {
+    "type": "object",
+    "properties": {"answer": {"type": "string", "enum": ["YES", "NO"]},
+                   "quote": {"type": "string"}},
+    "required": ["answer", "quote"],
+}
+_MODE_SCHEMA = {
+    "type": "object",
+    "properties": {"reasoning": {"type": "string"},
+                   **{field: _MODE_ANSWER_SCHEMA for field in _MODE_FIELDS}},
+    "required": ["reasoning", *_MODE_FIELDS],
 }
 
 
@@ -168,43 +192,49 @@ def classify_inheritance_mode(text: str, allow_x_linked: bool = True) -> str:
     return ""
 
 
-def _tokens(text: str) -> str:
-    return " ".join(re.findall(r"[a-z0-9]+", text.lower()))
+def _quote_in_evidence(gene: str, mode_label: str, quote: str, evidence: str,
+                       llm: "LLMClient") -> bool:
+    """True when the model confirms the quote is in the evidence
+    (prompts/moi_quote_check.txt, YES/NO by constrained decoding). A failed
+    call counts as not confirmed."""
+    user_prompt = (_QUOTE_CHECK_PROMPT_PATH.read_text(encoding="utf-8")
+                   .replace("{gene}", gene)
+                   .replace("{mode_label}", mode_label)
+                   .replace("{quote}", quote)
+                   .replace("{evidence_text}", evidence))
+    try:
+        verdict = json.loads(llm.generate(
+            system="You are checking whether a quoted statement appears in a source text.",
+            user=user_prompt,
+            max_tokens=MAX_NEW_TOKENS_QUOTE_CHECK,
+            json_schema=_QUOTE_CHECK_SCHEMA,
+        ))
+    except Exception as exc:
+        logger.warning("[MOI] Quote check failed for %s %s: %s", gene, mode_label, exc)
+        return False
+    return verdict["in_evidence"] == "YES"
 
 
-def _quote_in_evidence(quote: str, evidence_tokens: str) -> bool:
-    """True when the quote occurs in the evidence, word for word (case,
-    punctuation and spacing ignored; an ellipsis may join two quoted parts,
-    each of which must occur and be at least 3 words long)."""
-    parts = [_tokens(p) for p in re.split(r"\.\.\.|…", quote)]
-    parts = [p for p in parts if p]
-    return bool(parts) and all(len(p.split()) >= 3 and p in evidence_tokens for p in parts)
-
-
-def _parse_mode_lines(
-    result: str, evidence: str, allow_x_linked: bool,
+def _verified_modes(
+    gene: str, answers: dict, evidence: str, allow_x_linked: bool, llm: "LLMClient",
 ) -> tuple[list[str], list[tuple[str, str]], list[tuple[str, str]]]:
-    """(modes answered YES with a quote found in the evidence,
-    [(line label, quote)] accepted, [(line label, quote)] discarded because the
-    quote is not in the evidence)."""
-    evidence_tokens = _tokens(evidence)
+    """(modes answered YES with a quote the model confirms is in the evidence,
+    [(label, quote)] accepted, [(label, quote)] discarded). A YES with no
+    quote is not counted."""
     modes: list[str] = []
     accepted: list[tuple[str, str]] = []
     discarded: list[tuple[str, str]] = []
-    for line in result.splitlines():
-        text = line.strip().lstrip("-*• ").replace("**", "")
-        label, sep, answer = text.partition(":")
-        mode = _MODE_LINE_LABELS.get(label.strip().lower())
-        if not sep or not mode or not answer.strip().upper().startswith("YES"):
+    for field, (label, mode) in _MODE_FIELDS.items():
+        if answers[field]["answer"] != "YES":
             continue
-        quote = answer.strip()[3:].strip().strip("\"“”'")
         if mode in ("XLR", "XLD", "XL") and not allow_x_linked:
             continue
-        if _quote_in_evidence(quote, evidence_tokens):
+        quote = answers[field]["quote"].strip()
+        if quote and _quote_in_evidence(gene, label, quote, evidence, llm):
             modes.append(mode)
-            accepted.append((label.strip(), quote))
+            accepted.append((label, quote))
         else:
-            discarded.append((label.strip(), quote))
+            discarded.append((label, quote))
     return modes, accepted, discarded
 
 
@@ -218,12 +248,13 @@ def _llm_classify_mode(
     """Modes of inheritance with which the gene causes *conditions*, as stated in
     the retrieved evidence (GeneReviews summaries, literature, gnomAD constraint).
     The LLM answers each mode separately with a verbatim quote
-    (prompts/moi_condition_classification.txt); a mode counts only when its quote
-    occurs in the evidence. The modes are combined by the caller (combine_modes).
+    (prompts/moi_condition_classification.txt); a mode counts only when it has a
+    quote and a second model call confirms the quote is in the evidence. The
+    modes are combined by the caller (combine_modes).
 
     Returns (modes, reasoning_text, accepted, discarded) — modes [] means none
     stated; accepted/discarded are [(mode line label, quote)] for YES answers
-    whose quote was / was not found in the evidence.
+    whose quote was / was not confirmed (or was missing).
     allow_x_linked=False ignores X-linked answers (the gene's chromosome is
     known and is not X)."""
     conditions_block = (
@@ -235,23 +266,23 @@ def _llm_classify_mode(
                    .replace("{conditions_block}", conditions_block)
                    .replace("{evidence_text}", evidence_text))
     try:
-        result = llm.generate(
+        answers = json.loads(llm.generate(
             system=(
                 "You are an expert clinical geneticist determining the mode of inheritance "
-                "of a gene's conditions from the evidence. Limit your response to 200 words maximum."
+                "of a gene's conditions from the evidence."
             ),
             user=user_prompt,
             max_tokens=MAX_NEW_TOKENS_MODE_CLASSIFICATION,
-        )
+            json_schema=_MODE_SCHEMA,
+        ))
     except Exception as exc:
         logger.warning("[MOI] LLM mode classification failed for %s: %s", gene, exc)
         return [], "", [], []
 
-    modes, accepted, discarded = _parse_mode_lines(result, evidence_text, allow_x_linked)
+    modes, accepted, discarded = _verified_modes(gene, answers, evidence_text, allow_x_linked, llm)
     for label, quote in discarded:
-        logger.info("[MOI] Gene %s: %s YES discarded — quote not in evidence: %r", gene, label, quote)
-    reasoning = result.split("\nDominant:")[0].replace("Reasoning:", "", 1).strip()
-    return modes, reasoning, accepted, discarded
+        logger.info("[MOI] Gene %s: %s YES discarded — quote missing or not in evidence: %r", gene, label, quote)
+    return modes, answers["reasoning"].strip(), accepted, discarded
 
 
 def _norm_name(name: str) -> str:
@@ -356,10 +387,13 @@ def build_gene_mode_cache(
     CGD's gene-level inheritance is used only when all three give nothing.
     An X-linked mode is excluded for a gene whose chromosome is known and not X.
 
-    Returns (gene_mode_cache, gene_mode_reasoning_cache); mode "" = unknown.
-    The reasoning text lists each source's contribution."""
+    Returns (gene_mode_cache, gene_mode_reasoning_cache, gene_mode_sources_cache);
+    mode "" = unknown. The reasoning text lists each source's contribution;
+    the sources cache holds them as data for the clinical report: one dict per
+    source that gave a mode — {"source", "mode", "detail", "refs"}."""
     from pipeline.tools.litvar2 import LitVar2SummaryTool
-    from pipeline.tools.medgen_features import gene_disease_inheritance, split_condition_list
+    from pipeline.tools.medgen_features import gene_disease_ids, gene_disease_inheritance, split_condition_list
+    from pipeline.core.evidence_sources import refs_for
 
     kept_set = set(kept_indices)
     targets: list[tuple] = []
@@ -380,11 +414,12 @@ def build_gene_mode_cache(
                     matched.append(name)
         targets.append((gene, kept_in_gene, gene_chrom, allow_x_linked, all_names, matched))
 
-    def _resolve_one(item: tuple) -> tuple[str, str, str]:
+    def _resolve_one(item: tuple) -> tuple[str, str, str, list[dict]]:
         gene, kept_in_gene, gene_chrom, allow_x_linked, all_names, matched = item
         conditions = matched or all_names
         labels: list[str] = []
         notes: list[str] = []
+        sources: list[dict] = []
 
         medgen = gene_disease_inheritance(gene)
         if medgen is None:
@@ -396,6 +431,16 @@ def build_gene_mode_cache(
                              for _, modes in used for mode_name in modes]
             medgen_labels = [lab for lab in medgen_labels if lab]
             labels += medgen_labels
+            medgen_ids = gene_disease_ids(gene)
+            for title, modes in used:
+                title_labels = [lab for lab in (classify_inheritance_mode(m, allow_x_linked) for m in modes) if lab]
+                if title_labels:
+                    ids = medgen_ids.get(title, {})
+                    sources.append({
+                        "source": "MedGen", "mode": combine_modes(title_labels, gene_chrom), "detail": title,
+                        "refs": [f"OMIM:{m}" for m in ids.get("omim", [])]
+                                + ([f"MedGen {ids['cui']}"] if ids.get("cui") else []),
+                    })
             notes.append(
                 f"MedGen: {combine_modes(medgen_labels, gene_chrom) or 'none'}"
                 + (f" ({'; '.join(t for t, m in used if m)})" if any(m for _, m in used) else "")
@@ -408,16 +453,23 @@ def build_gene_mode_cache(
         csv_label = classify_inheritance_mode(csv_text, allow_x_linked)
         if csv_label:
             labels.append(csv_label)
+            sources.append({"source": "Input file (Inheritance/OMIM_inheritance)", "mode": csv_label,
+                            "detail": "", "refs": []})
         notes.append(f"CSV field: {csv_label or 'none'}")
 
         evidence = " ".join(evidence_by_index.get(i, "") for i in kept_in_gene)
         llm_modes, llm_reasoning, accepted, discarded = _llm_classify_mode(
             gene, conditions, evidence, llm, allow_x_linked)
         labels += llm_modes
+        for label, quote in accepted:
+            sources.append({"source": "Literature/GeneReviews",
+                            "mode": {lab: m for lab, m in _MODE_FIELDS.values()}[label],
+                            "detail": quote, "refs": refs_for(quote, evidence)})
         notes.append(
             f"Literature/GeneReviews: {combine_modes(llm_modes, gene_chrom) or 'UNKNOWN'}"
             + "".join(f' [{label}: "{quote}"]' for label, quote in accepted)
-            + "".join(f' [{label} YES discarded — quote not in evidence: "{quote}"]'
+            + "".join(f' [{label} YES discarded — '
+                      + (f'quote not in evidence: "{quote}"]' if quote else 'no quote]')
                       for label, quote in discarded)
         )
 
@@ -431,26 +483,30 @@ def build_gene_mode_cache(
                 cgd_label = ""
             mode = cgd_label
             notes.append(f"CGD (fallback): {cgd_label or 'none'}")
+            if cgd_label:
+                sources.append({"source": "CGD", "mode": cgd_label, "detail": "", "refs": ["CGD"]})
 
         scope = (f"conditions matching the patient: {', '.join(matched)}" if matched
                  else "no condition matched the patient — all of the gene's conditions")
         reasoning = f"Sources ({scope}) — " + "; ".join(notes) + "."
         if llm_reasoning:
             reasoning += f" Literature reading: {llm_reasoning}"
-        return gene, mode, reasoning
+        return gene, mode, reasoning, sources
 
     gene_mode_cache: dict[str, str] = {}
     gene_mode_reasoning_cache: dict[str, str] = {}
+    gene_mode_sources_cache: dict[str, list[dict]] = {}
     if targets:
         workers = min(MAX_WORKERS_MODE_CLASSIFICATION, len(targets))
         with ThreadPoolExecutor(max_workers=max(1, workers)) as pool:
             for future in as_completed([pool.submit(_resolve_one, t) for t in targets]):
-                gene, mode, reasoning = future.result()
+                gene, mode, reasoning, sources = future.result()
                 gene_mode_cache[gene] = mode
                 gene_mode_reasoning_cache[gene] = reasoning
+                gene_mode_sources_cache[gene] = sources
                 logger.info("[MOI] Gene %s: mode=%r — %s", gene, mode or "UNKNOWN",
                             reasoning.split(" Literature reading:")[0])
-    return gene_mode_cache, gene_mode_reasoning_cache
+    return gene_mode_cache, gene_mode_reasoning_cache, gene_mode_sources_cache
 
 
 def build_recessive_gene_groups(
