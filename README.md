@@ -6,7 +6,7 @@ IVA runs as two processes on one GPU machine: a **vLLM** server hosting the
 Qwen3.5-9B model, and the **IVA web server** (FastAPI), which runs the pipeline
 and serves the browser UI and HTTP API on port 8002. `start_iva.sh` starts both
 in the right order. The same `environment.yml` defines the software for the
-native install and for the Docker image.
+native install and for the Docker image. 
 
 **Requirements**
 
