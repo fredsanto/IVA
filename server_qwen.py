@@ -52,7 +52,7 @@ async def lifespan(app: FastAPI):
     asyncio.create_task(_cleanup_old_jobs())
     yield
 
-app = FastAPI(title="Qwen Variant Analysis Server — Live Streaming", lifespan=lifespan)
+app = FastAPI(title="IVA - Intelligent Variant Analysis Server — Live Streaming", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

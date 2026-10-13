@@ -64,7 +64,7 @@ conda activate "$CONDA_ENV"
 # ── Compute node info ─────────────────────────────────────────────────────────
 NODE=$(hostname -s)
 
-echo "[launch] Starting Qwen Variant Analysis Server (backend=$BACKEND, port=$PORT)"
+echo "[launch] Starting IVA - Intelligent Variant Analysis Server (backend=$BACKEND, port=$PORT)"
 echo "[launch] Compute node: $NODE"
 
 # ── Clear stale processes on our ports (leftover from a prior job on this node) ─
