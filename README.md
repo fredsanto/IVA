@@ -447,8 +447,8 @@ The full pipeline (direct mode) uses the conda env at `Qwen_Engine_IVA/env_vllm_
 
 ## Web UI
 
-
-![IVA web app showing a completed trio analysis](<img width="1210" height="864" alt="image" src="https://github.com/user-attachments/assets/c8aa8d9d-f8c4-44c2-9396-5eaa5236d77f" />)
+<img width="1210" height="864" alt="image" src="https://github.com/user-attachments/assets/c8aa8d9d-f8c4-44c2-9396-5eaa5236d77f" />
+![IVA web app showing a completed trio analysis]()
 
 *The web app after a finished run on the synthetic trio
 `TRIO_SYNTH_DEMO/profile_TET3_v2.csv`.*
