@@ -553,4 +553,4 @@ terms of use. The language model (Qwen3.5-9B) and vLLM are Apache-2.0.
 
 ## Note
 
-IVA was built upon a first prototype by Eric Ducret, [Genova](https://github.com/eric-ducret/genova-pipeline).
+IVA was built upon a first prototype by Eric Ducret, [Genova](https://github.com/eric-ducret/genova).
